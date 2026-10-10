@@ -1,0 +1,86 @@
+appId: com.anonymous.cashmemobile
+---
+# ==============================================================================
+# Suíte de Testes E2E Maestro - Fluxo de Autenticação e Guards por Role
+# Cash Me Mobile (TASK-02)
+# ==============================================================================
+
+# 1. Fluxo de Boas-vindas e Abertura do App
+- launchApp:
+    clearState: true
+
+# Aguarda carregamento inicial da tela de Splash ou redirecionamento para Login
+- assertVisible: "CashMe"
+
+# 2. Validação da Tela de Login
+- assertVisible: "Bem-vindo ao"
+- assertVisible: "E-mail"
+- assertVisible: "Senha"
+- assertVisible: "Entrar"
+- assertVisible: "Criar conta Consumidor"
+- assertVisible: "Cadastrar Lojista"
+
+# 3. Validação de Erro ao Tentar Logar com Campos Vazios ou Inválidos
+- tapOn: "Entrar"
+- assertVisible: "E-mail é obrigatório"
+
+# 4. Navegação para Cadastro de Consumidor
+- tapOn: "Criar conta Consumidor"
+- assertVisible: "Criar Conta"
+- assertVisible: "Nome Completo"
+- assertVisible: "CPF"
+- assertVisible: "Telefone Celular"
+- assertVisible: "Termos de Uso"
+- assertVisible: "Finalizar Cadastro"
+
+# Validação dos Termos de Uso (obrigatoriedade)
+- tapOn: "Finalizar Cadastro"
+- assertVisible: "Nome completo é obrigatório"
+
+# Retorna para a tela de Login
+- tapOn: "Fazer login"
+- assertVisible: "Bem-vindo ao"
+
+# 5. Navegação para Cadastro de Lojista
+- tapOn: "Cadastrar Lojista"
+- assertVisible: "Cadastro de Lojista"
+- assertVisible: "Dados do Responsável"
+- assertVisible: "Dados do Estabelecimento"
+- assertVisible: "Endereço Comercial"
+- assertVisible: "Cadastrar Estabelecimento"
+
+# Retorna para o Login
+- tapOn: "Fazer login"
+- assertVisible: "Entrar"
+
+# 6. Fluxo de Login Feliz - Consumidor (Mock / Test User)
+- tapOn: "seu.email@exemplo.com"
+- inputText: "consumidor@cashme.com"
+- tapOn: "Sua senha secreta"
+- inputText: "senha123456"
+- hideKeyboard
+- tapOn: "Entrar"
+
+# Espera transição para a área do Consumidor
+- extendedWaitUntil:
+    visible: "Área do Consumidor"
+    timeout: 10000
+
+# 7. Validação de Abas e Telas do Consumidor
+- assertVisible: "Pontos Acumulados"
+- assertVisible: "Início"
+- assertVisible: "Carteira"
+- assertVisible: "Escanear"
+- assertVisible: "Lojas"
+- assertVisible: "Perfil"
+
+# 8. Teste de Logout
+- tapOn: "Perfil"
+- assertVisible: "Encerrar Sessão"
+- tapOn: "Encerrar Sessão"
+- tapOn: "Sair"
+
+# Retorna ao Login com sucesso
+- extendedWaitUntil:
+    visible: "Bem-vindo ao"
+    timeout: 5000

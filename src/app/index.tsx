@@ -1,52 +1,32 @@
-import React, { useEffect, useState } from 'react';
+import { useRouter } from 'expo-router';
+import React, { useEffect } from 'react';
 import { ActivityIndicator, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { checkHealth } from '@/services/api';
-import { useAppStore } from '@/stores/use-app-store';
+import { useAuthStore } from '@/stores/use-auth-store';
 
 export default function SplashScreen() {
-  const { setIsLoading, setIsReady, setIsConnected } = useAppStore();
-  const [statusText, setStatusText] = useState('Inicializando...');
+  const router = useRouter();
+  const { isAuthenticated, user, isRestoringSession } = useAuthStore();
 
   useEffect(() => {
-    let isMounted = true;
-    setIsLoading(true);
-
-    const initialize = async () => {
-      try {
-        setStatusText('Verificando conexão com a API...');
-        const healthy = await checkHealth();
-        if (isMounted) {
-          setIsConnected(healthy);
-          setStatusText(healthy ? 'Conexão estabelecida!' : 'Modo offline ou API indisponível');
-        }
-      } catch {
-        if (isMounted) {
-          setIsConnected(false);
-          setStatusText('Modo offline');
-        }
-      } finally {
-        if (isMounted) {
-          setIsLoading(false);
-          setIsReady(true);
-        }
-      }
-    };
+    if (isRestoringSession) return;
 
     const timer = setTimeout(() => {
-      initialize();
-    }, 800);
+      if (!isAuthenticated) {
+        router.replace('/(auth)/login');
+      } else if (user?.userType === 'ESTABLISHMENT') {
+        router.replace('/(merchant)/(tabs)');
+      } else {
+        router.replace('/(consumer)/(tabs)');
+      }
+    }, 400);
 
-    return () => {
-      isMounted = false;
-      clearTimeout(timer);
-    };
-  }, [setIsConnected, setIsLoading, setIsReady]);
+    return () => clearTimeout(timer);
+  }, [isAuthenticated, user?.userType, isRestoringSession, router]);
 
   return (
     <SafeAreaView className="flex-1 bg-neutros-fundo justify-between items-center py-12 px-6">
-      {/* Top spacing */}
       <View className="h-6" />
 
       {/* Hero / Brand Section */}
@@ -76,15 +56,13 @@ export default function SplashScreen() {
         </View>
       </View>
 
-      {/* Loading & Status Section */}
+      {/* Loading Indicator */}
       <View className="items-center w-full max-w-xs">
         <ActivityIndicator size="large" color="#008D4C" className="mb-4" />
         <Text className="text-sm font-medium text-neutros-cinza text-center">
-          {statusText}
+          Iniciando CashMe...
         </Text>
-        <Text className="text-xs text-neutros-cinza/60 mt-2">
-          v1.0.0
-        </Text>
+        <Text className="text-xs text-neutros-cinza/60 mt-2">v1.0.0</Text>
       </View>
     </SafeAreaView>
   );

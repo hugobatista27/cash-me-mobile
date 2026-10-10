@@ -1,6 +1,8 @@
 import axios, { AxiosInstance, AxiosRequestConfig } from 'axios';
 import { Platform } from 'react-native';
 
+import { getAuthToken } from '@/services/storage';
+
 /**
  * Obtém a baseURL do backend considerando as particularidades de cada plataforma
  * e variáveis de ambiente com prefixo EXPO_PUBLIC_
@@ -34,9 +36,17 @@ export const apiClient: AxiosInstance = axios.create({
   },
 });
 
-// Interceptor de requisições (preparado para injeção de token JWT/Bearer)
+// Interceptor de requisições anexando o token Bearer salvo no SecureStore
 apiClient.interceptors.request.use(
-  (config) => {
+  async (config) => {
+    try {
+      const token = await getAuthToken();
+      if (token && config.headers) {
+        config.headers.Authorization = `Bearer ${token}`;
+      }
+    } catch {
+      // Ignora erro de leitura de token se ocorrer
+    }
     return config;
   },
   (error) => {
@@ -44,10 +54,18 @@ apiClient.interceptors.request.use(
   }
 );
 
-// Interceptor de respostas para captura global de erros de rede
+// Interceptor de respostas: captura global de 401 limpando sessão
 apiClient.interceptors.response.use(
   (response) => response,
-  (error) => {
+  async (error) => {
+    if (error?.response?.status === 401) {
+      try {
+        const { useAuthStore } = await import('@/stores/use-auth-store');
+        await useAuthStore.getState().clearAuth();
+      } catch {
+        // Ignora erro durante limpeza de sessão
+      }
+    }
     return Promise.reject(error);
   }
 );
