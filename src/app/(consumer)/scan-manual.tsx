@@ -14,18 +14,25 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { SefazWebviewModal } from '@/components/SefazWebviewModal';
 import { useProcessInvoice } from '@/hooks/useInvoices';
-import { formatAccessKey, parseNfceContent } from '@/utils/nfceParser';
+import { extractAccessKey, formatAccessKey, parseNfceContent } from '@/utils/nfceParser';
 
 export default function ConsumerScanManualScreen() {
   const router = useRouter();
   const [rawInput, setRawInput] = useState('');
+  const [webviewOpen, setWebviewOpen] = useState(false);
   const processMutation = useProcessInvoice();
 
   const digitsOnly = rawInput.replace(/\D/g, '').slice(0, 44);
   const isComplete = digitsOnly.length === 44;
 
   const handleChangeText = (text: string) => {
+    const extracted = extractAccessKey(text);
+    if (extracted) {
+      setRawInput(extracted);
+      return;
+    }
     const cleaned = text.replace(/\D/g, '').slice(0, 44);
     setRawInput(cleaned);
   };
@@ -178,8 +185,34 @@ export default function ConsumerScanManualScreen() {
               </View>
             )}
           </TouchableOpacity>
+
+          {/* Atalho para Abrir Portal SEFAZ SC via WebView */}
+          <TouchableOpacity
+            onPress={() => setWebviewOpen(true)}
+            activeOpacity={0.7}
+            className="w-full py-4 items-center justify-center border border-neutros-borda bg-white rounded-2xl flex-row gap-2 mt-4"
+          >
+            <Ionicons name="globe-outline" size={18} color="#008D4C" />
+            <Text className="text-neutros-texto font-bold text-sm">
+              🌐 Abrir Portal SEFAZ SC (com CAPTCHA)
+            </Text>
+          </TouchableOpacity>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {webviewOpen && (
+        <SefazWebviewModal
+          visible={webviewOpen}
+          url="https://sat.sef.sc.gov.br/nfce/consulta"
+          onClose={() => setWebviewOpen(false)}
+          onExtracted={(data) => {
+            setWebviewOpen(false);
+            if (data.info.chaveAcesso) {
+              setRawInput(data.info.chaveAcesso.replace(/\D/g, ''));
+            }
+          }}
+        />
+      )}
     </SafeAreaView>
   );
 }

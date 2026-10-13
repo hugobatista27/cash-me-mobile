@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useRouter } from 'expo-router';
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -14,16 +14,33 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { NfceResultView } from '@/components/NfceResultView';
+import { SefazWebviewModal } from '@/components/SefazWebviewModal';
 import { useProcessInvoice } from '@/hooks/useInvoices';
-import { parseNfceContent } from '@/utils/nfceParser';
+import {
+  NfceData,
+  ParsedNfce,
+  parseNfceContent,
+} from '@/utils/nfceParser';
+
+const DEFAULT_SEFAZ_SC_URL = 'https://sat.sef.sc.gov.br/nfce/consulta';
+
+interface ExtractedResultState {
+  data: NfceData;
+  pointsAwarded?: number;
+  balance?: number;
+  rawHtml?: string;
+}
 
 export default function ConsumerScanScreen() {
   const router = useRouter();
   const [permission, requestPermission] = useCameraPermissions();
   const [torchEnabled, setTorchEnabled] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
-  const lastScannedCodeRef = useRef<string | null>(null);
+  const [sefazModalUrl, setSefazModalUrl] = useState<string | null>(null);
+  const [extractedResult, setExtractedResult] = useState<ExtractedResultState | null>(null);
 
+  const lastScannedCodeRef = useRef<string | null>(null);
   const processMutation = useProcessInvoice();
 
   // Animação da linha de escaneamento do viewfinder
@@ -50,43 +67,11 @@ export default function ConsumerScanScreen() {
     return () => loop.stop();
   }, [scanLineAnim]);
 
-  const handleBarcodeScanned = async ({ data }: { data: string }) => {
-    if (isProcessing) return;
-    if (lastScannedCodeRef.current === data) return;
-
-    lastScannedCodeRef.current = data;
+  const executeDirectProcess = useCallback(async (parsed: ParsedNfce) => {
     setIsProcessing(true);
-
-    const parsed = parseNfceContent(data);
-
-    if (!parsed.isValid || !parsed.accessKey) {
-      Alert.alert(
-        'QR Code Inválido ou Não Suportado',
-        parsed.errorMessage || 'Não foi possível validar este QR Code como uma NFC-e homologada.',
-        [
-          {
-            text: 'Tentar Novamente',
-            onPress: () => {
-              setIsProcessing(false);
-              lastScannedCodeRef.current = null;
-            },
-          },
-          {
-            text: 'Digitar Manualmente',
-            onPress: () => {
-              setIsProcessing(false);
-              lastScannedCodeRef.current = null;
-              router.push('/(consumer)/scan-manual');
-            },
-          },
-        ]
-      );
-      return;
-    }
-
     try {
       const response = await processMutation.mutateAsync({
-        accessKey: parsed.accessKey,
+        accessKey: parsed.accessKey!,
         qrCodeUrl: parsed.qrCodeUrl,
         issuerState: parsed.issuerState,
         issuerCnpj: parsed.issuerCnpj,
@@ -103,7 +88,9 @@ export default function ConsumerScanScreen() {
         },
       });
     } catch (err: unknown) {
-      const maybeAxios = err as { response?: { status?: number; data?: { code?: string; message?: string } } };
+      const maybeAxios = err as {
+        response?: { status?: number; data?: { code?: string; message?: string } };
+      };
       const status = maybeAxios?.response?.status;
       const code = maybeAxios?.response?.data?.code;
       const message = maybeAxios?.response?.data?.message;
@@ -111,36 +98,151 @@ export default function ConsumerScanScreen() {
       if (status === 409 || code === 'E_DUPLICATE_INVOICE') {
         Alert.alert(
           'Nota Fiscal Já Processada (RN02)',
-          'Esta NFC-e já foi pontuada anteriormente. Cada nota fiscal só pode conceder pontos uma única vez.',
-          [
-            {
-              text: 'OK',
-              onPress: () => {
-                setIsProcessing(false);
-                lastScannedCodeRef.current = null;
-              },
-            },
-          ]
+          'Esta NFC-e já foi pontuada anteriormente. Cada nota fiscal só pode conceder pontos uma única vez.'
         );
       } else {
         Alert.alert(
           'Erro ao Processar Nota',
-          message || 'Ocorreu um erro ao enviar a nota para a SEFAZ ou ao computar os pontos.',
-          [
-            {
-              text: 'OK',
-              onPress: () => {
-                setIsProcessing(false);
-                lastScannedCodeRef.current = null;
-              },
-            },
-          ]
+          message || 'Ocorreu um erro ao enviar a nota para a SEFAZ ou ao computar os pontos.'
         );
       }
     } finally {
       setIsProcessing(false);
+      lastScannedCodeRef.current = null;
+    }
+  }, [processMutation, router]);
+
+  const handleBarcodeScanned = async ({ data }: { data: string }) => {
+    if (isProcessing) return;
+    if (lastScannedCodeRef.current === data) return;
+
+    lastScannedCodeRef.current = data;
+    const parsed = parseNfceContent(data);
+
+    if (!parsed.isValid || !parsed.accessKey) {
+      Alert.alert(
+        'QR Code Inválido ou Não Suportado',
+        parsed.errorMessage || 'Não foi possível validar este QR Code como uma NFC-e homologada.',
+        [
+          {
+            text: 'Tentar Novamente',
+            onPress: () => {
+              lastScannedCodeRef.current = null;
+            },
+          },
+          {
+            text: 'Digitar Manualmente',
+            onPress: () => {
+              lastScannedCodeRef.current = null;
+              router.push('/(consumer)/scan-manual');
+            },
+          },
+        ]
+      );
+      return;
+    }
+
+    const isUrl = data.trim().startsWith('http://') || data.trim().startsWith('https://');
+
+    if (isUrl) {
+      Alert.alert(
+        'NFC-e Detectada',
+        'Como deseja processar este cupom fiscal?',
+        [
+          {
+            text: 'Processar Pontos Direto',
+            onPress: () => executeDirectProcess(parsed),
+          },
+          {
+            text: '🌐 Abrir SEFAZ & Ver Itens',
+            onPress: () => {
+              setSefazModalUrl(data.trim());
+            },
+          },
+          {
+            text: 'Cancelar',
+            style: 'cancel',
+            onPress: () => {
+              lastScannedCodeRef.current = null;
+            },
+          },
+        ]
+      );
+      return;
+    }
+
+    await executeDirectProcess(parsed);
+  };
+
+  const handleWebviewExtracted = async (data: NfceData, rawHtml: string) => {
+    setSefazModalUrl(null);
+    setIsProcessing(true);
+
+    const accessKey = data.info.chaveAcesso.replace(/\D/g, '');
+    const stateCode = accessKey.substring(0, 2);
+    const issuerState = stateCode === '42' ? 'SC' : stateCode === '41' ? 'PR' : undefined;
+
+    let pointsAwarded = 0;
+    let balance: number | undefined;
+
+    try {
+      const response = await processMutation.mutateAsync({
+        accessKey,
+        qrCodeUrl: data.url,
+        issuerState,
+        issuerCnpj: data.emitente.cnpj.replace(/\D/g, ''),
+        totalAmount: data.totais.valorPagar || data.totais.valorTotal,
+      });
+
+      pointsAwarded = response.pointsAwarded;
+      balance = response.balance?.currentBalance;
+    } catch (err: unknown) {
+      const maybeAxios = err as {
+        response?: { status?: number; data?: { code?: string; message?: string } };
+      };
+      const status = maybeAxios?.response?.status;
+      const code = maybeAxios?.response?.data?.code;
+
+      if (status === 409 || code === 'E_DUPLICATE_INVOICE') {
+        Alert.alert(
+          'Nota Já Pontuada (RN02)',
+          'Esta nota fiscal já concedeu pontos anteriormente no Cash Me. Os produtos foram extraídos para sua conferência.'
+        );
+      }
+    } finally {
+      setIsProcessing(false);
+      lastScannedCodeRef.current = null;
+      setExtractedResult({
+        data,
+        rawHtml,
+        pointsAwarded,
+        balance,
+      });
     }
   };
+
+  // Se houver resultado detalhado extraído, renderiza a visualização rica da NFC-e
+  if (extractedResult) {
+    return (
+      <SafeAreaView className="flex-1 bg-neutros-fundo">
+        <NfceResultView
+          data={extractedResult.data}
+          pointsAwarded={extractedResult.pointsAwarded}
+          balance={extractedResult.balance}
+          rawHtml={extractedResult.rawHtml}
+          onReset={() => {
+            setExtractedResult(null);
+            lastScannedCodeRef.current = null;
+          }}
+          onBackToWebView={() => {
+            setSefazModalUrl(extractedResult.data.url || DEFAULT_SEFAZ_SC_URL);
+            setExtractedResult(null);
+          }}
+          onGoToHome={() => router.replace('/(consumer)/(tabs)')}
+        />
+      </SafeAreaView>
+    );
+  }
 
   // Se as permissões ainda estiverem carregando
   if (!permission) {
@@ -174,13 +276,28 @@ export default function ConsumerScanScreen() {
           </TouchableOpacity>
         </View>
 
-        <TouchableOpacity
-          onPress={() => router.push('/(consumer)/scan-manual')}
-          activeOpacity={0.7}
-          className="w-full py-4 items-center justify-center border border-neutros-borda bg-white rounded-2xl mb-4"
-        >
-          <Text className="text-neutros-texto font-bold text-sm">Digitar Chave Manualmente</Text>
-        </TouchableOpacity>
+        <View className="gap-3 mb-4">
+          <TouchableOpacity
+            onPress={() => setSefazModalUrl(DEFAULT_SEFAZ_SC_URL)}
+            activeOpacity={0.7}
+            className="w-full py-4 items-center justify-center border border-neutros-borda bg-white rounded-2xl flex-row gap-2"
+          >
+            <Ionicons name="globe-outline" size={18} color="#008D4C" />
+            <Text className="text-neutros-texto font-bold text-sm">
+              Abrir Portal SEFAZ SC (WebView)
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={() => router.push('/(consumer)/scan-manual')}
+            activeOpacity={0.7}
+            className="w-full py-4 items-center justify-center border border-neutros-borda bg-white rounded-2xl"
+          >
+            <Text className="text-neutros-texto font-bold text-sm">
+              Digitar Chave Manualmente
+            </Text>
+          </TouchableOpacity>
+        </View>
       </SafeAreaView>
     );
   }
@@ -192,6 +309,19 @@ export default function ConsumerScanScreen() {
 
   return (
     <View className="flex-1 bg-black">
+      {/* Modal SEFAZ WebView para resolução de CAPTCHA e extração */}
+      {sefazModalUrl && (
+        <SefazWebviewModal
+          visible={Boolean(sefazModalUrl)}
+          url={sefazModalUrl}
+          onClose={() => {
+            setSefazModalUrl(null);
+            lastScannedCodeRef.current = null;
+          }}
+          onExtracted={handleWebviewExtracted}
+        />
+      )}
+
       {/* Visualizador da Câmera */}
       {Platform.OS !== 'web' ? (
         <CameraView
@@ -201,7 +331,7 @@ export default function ConsumerScanScreen() {
           barcodeScannerSettings={{
             barcodeTypes: ['qr'],
           }}
-          onBarcodeScanned={isProcessing ? undefined : handleBarcodeScanned}
+          onBarcodeScanned={isProcessing || Boolean(sefazModalUrl) ? undefined : handleBarcodeScanned}
         />
       ) : (
         <View className="flex-1 items-center justify-center bg-zinc-900">
@@ -276,15 +406,26 @@ export default function ConsumerScanScreen() {
           </Text>
         </View>
 
-        {/* Rodapé: Botão de Entrada Manual */}
-        <View className="items-center pb-2">
+        {/* Rodapé: Botões de Ação Alternativos */}
+        <View className="gap-3 items-center pb-2">
+          <TouchableOpacity
+            onPress={() => setSefazModalUrl(DEFAULT_SEFAZ_SC_URL)}
+            activeOpacity={0.8}
+            className="flex-row items-center gap-2 px-5 py-3 bg-white/95 rounded-2xl shadow-lg border border-white"
+          >
+            <Ionicons name="globe-outline" size={18} color="#008D4C" />
+            <Text className="text-sm font-bold text-neutros-texto">
+              🌐 Abrir Portal SEFAZ SC (WebView)
+            </Text>
+          </TouchableOpacity>
+
           <TouchableOpacity
             onPress={() => router.push('/(consumer)/scan-manual')}
             activeOpacity={0.8}
-            className="flex-row items-center gap-2 px-6 py-3.5 bg-white/95 rounded-2xl shadow-lg border border-white"
+            className="flex-row items-center gap-2 px-6 py-3 bg-black/60 rounded-2xl border border-white/20"
           >
-            <Ionicons name="keypad-outline" size={18} color="#008D4C" />
-            <Text className="text-sm font-bold text-neutros-texto">
+            <Ionicons name="keypad-outline" size={16} color="#FFFFFF" />
+            <Text className="text-xs font-bold text-white">
               Digitar Chave de 44 Dígitos
             </Text>
           </TouchableOpacity>

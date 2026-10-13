@@ -4,6 +4,9 @@ import {
   extractAccessKey,
   isIssuedWithin48Hours,
   formatAccessKey,
+  parseNfceHtml,
+  formatCurrency,
+  parseBrlNumber,
 } from '../nfceParser';
 
 describe('nfceParser utility', () => {
@@ -120,6 +123,102 @@ describe('nfceParser utility', () => {
       const result = parseNfceContent('123456');
       expect(result.isValid).toBe(false);
       expect(result.errorMessage).toMatch(/44 dígitos/i);
+    });
+  });
+
+  describe('formatCurrency e parseBrlNumber', () => {
+    it('deve converter strings monetárias brasileiras para float', () => {
+      expect(parseBrlNumber('R$ 1.250,90')).toBe(1250.9);
+      expect(parseBrlNumber('12,50')).toBe(12.5);
+      expect(parseBrlNumber('0,00')).toBe(0);
+      expect(parseBrlNumber('')).toBe(0);
+    });
+
+    it('deve formatar números para padrão BRL', () => {
+      const formatted = formatCurrency(1250.5);
+      expect(formatted).toMatch(/1\.250,50/);
+    });
+  });
+
+  describe('parseNfceHtml (Web Scraping SEFAZ)', () => {
+    const mockHtml = `
+      <html>
+        <head><title>Consulta NFC-e SEFAZ</title></head>
+        <body>
+          <div class="txtTopo">Supermercado Alvorada Ltda</div>
+          <div class="text">CNPJ: 12.345.678/0001-95</div>
+          <span class="chave">4223 0912 3456 7800 0195 6500 1000 0001 2310 0000 1234</span>
+          <span class="data">Emissão: 13/10/2026 15:30:00</span>
+          
+          <table id="tabResult">
+            <tr>
+              <td>
+                <span class="txtTit">Café Torrado Especial 500g</span>
+                <span class="RCod">(Código: 78910001)</span>
+                <span class="Rqty">Qtde.: 2 UN</span>
+                <span class="RvlUnit">Vl. Unit.: 18,50</span>
+                <span class="valor">Vl. Total: 37,00</span>
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <span class="txtTit">Leite Integral 1L</span>
+                <span class="RCod">(Código: 78910002)</span>
+                <span class="Rqty">Qtde.: 3 UN</span>
+                <span class="RvlUnit">Vl. Unit.: 5,50</span>
+                <span class="valor">Vl. Total: 16,50</span>
+              </td>
+            </tr>
+          </table>
+
+          <label>Qtd. total de itens</label><span class="totalNumb">2</span>
+          <label>Valor total</label><span class="totalNumb">53,50</span>
+          <label>Desconto</label><span>3,50</span>
+          <label>Valor a pagar</label><span class="txtMax">50,00</span>
+          <div>Forma de Pagamento: Cartão de Crédito</div>
+          <div>Consumidor CPF: 123.456.789-00</div>
+        </body>
+      </html>
+    `;
+
+    it('deve extrair emitente, chave de acesso e dados da nota', () => {
+      const parsed = parseNfceHtml(mockHtml, 'https://sat.sef.sc.gov.br/nfce/consulta');
+      expect(parsed.emitente.razaoSocial).toBe('Supermercado Alvorada Ltda');
+      expect(parsed.emitente.cnpj).toBe('12.345.678/0001-95');
+      expect(parsed.info.chaveAcesso).toBe(validAccessKey);
+      expect(parsed.info.dataEmissao).toMatch(/13\/10\/2026/);
+    });
+
+    it('deve extrair itens individuais com preços e quantidades', () => {
+      const parsed = parseNfceHtml(mockHtml);
+      expect(parsed.itens).toHaveLength(2);
+      expect(parsed.itens[0]).toEqual({
+        codigo: '78910001',
+        descricao: 'Café Torrado Especial 500g',
+        quantidade: 2,
+        unidade: 'UN',
+        valorUnitario: 18.5,
+        valorTotal: 37,
+      });
+      expect(parsed.itens[1].descricao).toBe('Leite Integral 1L');
+      expect(parsed.itens[1].valorTotal).toBe(16.5);
+    });
+
+    it('deve extrair totais, desconto e forma de pagamento corretamente', () => {
+      const parsed = parseNfceHtml(mockHtml);
+      expect(parsed.totais.qtdItens).toBe(2);
+      expect(parsed.totais.valorTotal).toBe(53.5);
+      expect(parsed.totais.desconto).toBe(3.5);
+      expect(parsed.totais.valorPagar).toBe(50.0);
+      expect(parsed.totais.formaPagamento).toBe('Cartão de Crédito');
+      expect(parsed.consumidor.documento).toBe('123.456.789-00');
+    });
+
+    it('deve extrair chave de acesso da URL caso não esteja no corpo HTML', () => {
+      const minimalHtml = '<div>Total R$ 10,00</div>';
+      const pageUrl = 'https://sat.sef.sc.gov.br/nfce/qrcode?p=42230912345678000195650010000001231000001234|2|1|1|...';
+      const parsed = parseNfceHtml(minimalHtml, pageUrl);
+      expect(parsed.info.chaveAcesso).toBe(validAccessKey);
     });
   });
 });
