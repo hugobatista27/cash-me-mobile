@@ -85,8 +85,12 @@ export const authService = {
    * POST /api/v1/auth/login
    */
   async login(payload: LoginRequest): Promise<LoginResponse> {
-    const response = await apiClient.post<LoginResponse>('/auth/login', payload);
-    return response.data;
+    const response = await apiClient.post<LoginResponse | { data: LoginResponse }>(
+      '/auth/login',
+      payload
+    );
+    const body = response.data;
+    return (body && 'data' in body ? body.data : body) as LoginResponse;
   },
 
   /**
@@ -94,11 +98,11 @@ export const authService = {
    * POST /api/v1/auth/customer/signup
    */
   async signupCustomer(payload: SignupCustomerRequest): Promise<SignupCustomerResponse> {
-    const response = await apiClient.post<SignupCustomerResponse>(
-      '/auth/customer/signup',
-      payload
-    );
-    return response.data;
+    const response = await apiClient.post<
+      SignupCustomerResponse | { data: SignupCustomerResponse }
+    >('/auth/customer/signup', payload);
+    const body = response.data;
+    return (body && 'data' in body ? body.data : body) as SignupCustomerResponse;
   },
 
   /**
@@ -108,11 +112,11 @@ export const authService = {
   async registerEstablishment(
     payload: RegisterEstablishmentRequest
   ): Promise<RegisterEstablishmentResponse> {
-    const response = await apiClient.post<RegisterEstablishmentResponse>(
-      '/auth/establishment/register',
-      payload
-    );
-    return response.data;
+    const response = await apiClient.post<
+      RegisterEstablishmentResponse | { data: RegisterEstablishmentResponse }
+    >('/auth/establishment/register', payload);
+    const body = response.data;
+    return (body && 'data' in body ? body.data : body) as RegisterEstablishmentResponse;
   },
 
   /**
@@ -120,8 +124,11 @@ export const authService = {
    * POST /api/v1/account/logout
    */
   async logout(): Promise<LogoutResponse> {
-    const response = await apiClient.post<LogoutResponse>('/account/logout');
-    return response.data;
+    const response = await apiClient.post<LogoutResponse | { data: LogoutResponse }>(
+      '/account/logout'
+    );
+    const body = response.data;
+    return (body && 'data' in body ? body.data : body) as LogoutResponse;
   },
 };
 

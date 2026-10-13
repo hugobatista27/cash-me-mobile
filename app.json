@@ -3,6 +3,7 @@
     "name": "cash-me-mobile",
     "slug": "cash-me-mobile",
     "version": "1.0.0",
+    "primaryColor": "#008D4C",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "cashme",

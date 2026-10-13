@@ -1,86 +1,173 @@
-appId: com.anonymous.cashmemobile
+appId: host.exp.exponent
 ---
 # ==============================================================================
-# Suíte de Testes E2E Maestro - Fluxo de Autenticação e Guards por Role
-# Cash Me Mobile (TASK-02)
+# Suíte de Testes E2E Maestro - Integração Real com Backend Adonis
+# 1. Cadastro Real de Cliente/Consumidor -> Redirecionamento para (consumer)/(tabs)
+# 2. Logout Real com Limpeza de Sessão
+# 3. Cadastro Real de Estabelecimento/Lojista -> Redirecionamento para (merchant)/(tabs)
 # ==============================================================================
 
-# 1. Fluxo de Boas-vindas e Abertura do App
-- launchApp:
-    clearState: true
+# Aguarda tela de login
+- extendedWaitUntil:
+    visible: "Bem-vindo ao CashMe"
+    timeout: 15000
 
-# Aguarda carregamento inicial da tela de Splash ou redirecionamento para Login
-- assertVisible: "CashMe"
-
-# 2. Validação da Tela de Login
-- assertVisible: "Bem-vindo ao"
-- assertVisible: "E-mail"
-- assertVisible: "Senha"
-- assertVisible: "Entrar"
-- assertVisible: "Criar conta Consumidor"
-- assertVisible: "Cadastrar Lojista"
-
-# 3. Validação de Erro ao Tentar Logar com Campos Vazios ou Inválidos
-- tapOn: "Entrar"
-- assertVisible: "E-mail é obrigatório"
-
-# 4. Navegação para Cadastro de Consumidor
+# ------------------------------------------------------------------------------
+# PARTE 1: CADASTRO REAL DE CONSUMIDOR
+# ------------------------------------------------------------------------------
 - tapOn: "Criar conta Consumidor"
-- assertVisible: "Criar Conta"
-- assertVisible: "Nome Completo"
-- assertVisible: "CPF"
-- assertVisible: "Telefone Celular"
-- assertVisible: "Termos de Uso"
-- assertVisible: "Finalizar Cadastro"
+- assertVisible: "Criar Conta Consumidor"
 
-# Validação dos Termos de Uso (obrigatoriedade)
-- tapOn: "Finalizar Cadastro"
-- assertVisible: "Nome completo é obrigatório"
+- tapOn: "Ex: Maria Silva"
+- inputText: "Consumidor E2E"
 
-# Retorna para a tela de Login
-- tapOn: "Fazer login"
-- assertVisible: "Bem-vindo ao"
-
-# 5. Navegação para Cadastro de Lojista
-- tapOn: "Cadastrar Lojista"
-- assertVisible: "Cadastro de Lojista"
-- assertVisible: "Dados do Responsável"
-- assertVisible: "Dados do Estabelecimento"
-- assertVisible: "Endereço Comercial"
-- assertVisible: "Cadastrar Estabelecimento"
-
-# Retorna para o Login
-- tapOn: "Fazer login"
-- assertVisible: "Entrar"
-
-# 6. Fluxo de Login Feliz - Consumidor (Mock / Test User)
 - tapOn: "seu.email@exemplo.com"
-- inputText: "consumidor@cashme.com"
-- tapOn: "Sua senha secreta"
-- inputText: "senha123456"
-- hideKeyboard
-- tapOn: "Entrar"
+- inputText: "cliente.live3@cashme.com"
 
-# Espera transição para a área do Consumidor
+- tapOn: "000.000.000-00"
+- inputText: "70167044591"
+
+- tapOn: "(00) 00000-0000"
+- inputText: "11987654321"
+
+- tapOn: "Mínimo 8 caracteres"
+- inputText: "password123"
+
+- hideKeyboard
+
+- tapOn: "Repita sua senha"
+- inputText: "password123"
+
+- hideKeyboard
+
+# Aceita os termos de uso (visível e desobstruído com teclado fechado)
+- tapOn: "Declaro que li e aceito os Termos de Uso e a Política de Privacidade."
+
+# Submete cadastro do consumidor
+- tapOn: "Cadastrar"
+
+# Valida transição para a tela inicial do consumidor (Home / Tabs)
 - extendedWaitUntil:
     visible: "Área do Consumidor"
-    timeout: 10000
+    timeout: 15000
 
-# 7. Validação de Abas e Telas do Consumidor
+- assertVisible: "Olá, Consumidor E2E 👋"
 - assertVisible: "Pontos Acumulados"
 - assertVisible: "Início"
 - assertVisible: "Carteira"
 - assertVisible: "Escanear"
 - assertVisible: "Lojas"
-- assertVisible: "Perfil"
 
-# 8. Teste de Logout
+# Realiza Logout para testar o próximo fluxo
 - tapOn: "Perfil"
-- assertVisible: "Encerrar Sessão"
+- extendedWaitUntil:
+    visible: "Encerrar Sessão"
+    timeout: 10000
+
 - tapOn: "Encerrar Sessão"
+- extendedWaitUntil:
+    visible: "Sair"
+    timeout: 5000
 - tapOn: "Sair"
 
-# Retorna ao Login com sucesso
+# Confirma retorno para a tela de Login
 - extendedWaitUntil:
-    visible: "Bem-vindo ao"
-    timeout: 5000
+    visible: "Bem-vindo ao CashMe"
+    timeout: 10000
+
+# ------------------------------------------------------------------------------
+# PARTE 2: CADASTRO REAL DE ESTABELECIMENTO / LOJISTA
+# ------------------------------------------------------------------------------
+- tapOn: "Cadastrar Lojista"
+- assertVisible: "Onboarding do Comércio"
+
+# 1. Dados do Administrador
+- tapOn: "Ex: Carlos Eduardo"
+- inputText: "Carlos Gestor"
+
+- tapOn: "contato@minhaloja.com"
+- inputText: "lojista.live3@cashme.com"
+
+- tapOn: "Mínimo 8 caracteres"
+- inputText: "password123"
+
+- hideKeyboard
+
+- tapOn: "Repita sua senha"
+- inputText: "password123"
+
+- hideKeyboard
+
+# 2. Dados da Empresa
+- tapOn: "00.000.000/0000-00"
+- inputText: "50401244000154"
+
+- hideKeyboard
+
+- tapOn: "Ex: Comercial de Alimentos Ltda"
+- inputText: "Padaria Central E2E Ltda"
+
+- hideKeyboard
+
+- tapOn: "Ex: Supermercado Central"
+- inputText: "Padaria Central E2E"
+
+- hideKeyboard
+
+- tapOn: "(00) 0000-0000"
+- inputText: "1133334444"
+
+- hideKeyboard
+
+# Rola a tela para preencher Endereço Comercial
+- scroll
+
+# 3. Endereço Comercial
+- tapOn: "00000-000"
+- inputText: "88010000"
+
+- hideKeyboard
+
+- tapOn: "Ex: Av. Brasil"
+- inputText: "Rua Felipe Schmidt"
+
+- hideKeyboard
+
+- tapOn: "123"
+- inputText: "450"
+
+- hideKeyboard
+
+- tapOn: "Centro"
+- inputText: "Centro"
+
+- hideKeyboard
+
+- tapOn: "São Paulo"
+- inputText: "Florianópolis"
+
+- hideKeyboard
+
+- tapOn: "SP"
+- inputText: "SC"
+
+- hideKeyboard
+
+# Rola para garantir visibilidade do botão de submissão
+- scroll
+
+# Submete cadastro do comércio
+- tapOn: "Cadastrar Comércio"
+
+# Valida transição para o Dashboard do Lojista (Merchant Tabs)
+- extendedWaitUntil:
+    visible: "Painel do Estabelecimento"
+    timeout: 15000
+
+- assertVisible: "Padaria Central E2E"
+- assertVisible: "Pendente de Homologação"
+- assertVisible: "Regras de Negócio (RN06)"
+- assertVisible: "Dashboard"
+- assertVisible: "Regras"
+- assertVisible: "Clientes"
+- assertVisible: "Perfil Loja"

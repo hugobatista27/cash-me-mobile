@@ -1,0 +1,95 @@
+appId: host.exp.exponent
+---
+# ==============================================================================
+# Suíte de Testes E2E Maestro - TASK-06: Interface do Lojista (Regras & Simulador)
+# 1. Validação da Regra Ativa Vigente (Card com resumo humano)
+# 2. Simulação em Tempo Real com Debounce
+# 3. Navegação e Auditoria de Histórico de Regras (RN04)
+# 4. Publicação e Versionamento de Nova Regra (v2)
+# 5. Invalidação de Cache e Atualização Instantânea da UI
+# ==============================================================================
+
+# 1. Garante que está na tela de Regras
+- tapOn: "Regras"
+
+- extendedWaitUntil:
+    visible: "Regras e Simulador"
+    timeout: 10000
+
+- assertVisible: "POLÍTICAS DE FIDELIDADE"
+- assertVisible: "Regra Ativa Oficial"
+- assertVisible: "v1"
+
+# 2. Testa o Simulador em Tempo Real (Limpa o valor anterior antes de digitar)
+- tapOn:
+    below: "Valor da Compra (R$)"
+- eraseText: 20
+- inputText: "250.00"
+- hideKeyboard
+
+- extendedWaitUntil:
+    visible: "250 pts"
+    timeout: 5000
+
+# 3. Navega para o Histórico de Regras
+- tapOn: "Histórico"
+- extendedWaitUntil:
+    visible: "Histórico de Regras"
+    timeout: 5000
+
+- assertVisible: "Auditoria e versionamento imutável (RN04)"
+- assertVisible: "Versão 1"
+- assertVisible: "Ativa"
+
+# Retorna para a tela de Regras tocando no botão Voltar
+- tapOn: "Voltar"
+
+- extendedWaitUntil:
+    visible: "Regras e Simulador"
+    timeout: 5000
+
+# 4. Publica Nova Versão da Regra (v2)
+- scroll
+
+# Edita o nome da regra
+- tapOn:
+    below: "Nome ou Descrição da Regra"
+- eraseText: 50
+- inputText: "Fidelidade R$ 5"
+- hideKeyboard
+
+# Edita a base monetária para 5
+- tapOn:
+    below: "A cada R$ (Base)"
+- eraseText: 10
+- inputText: "5"
+- hideKeyboard
+
+- scroll
+
+# Toca no botão de Publicar Nova Regra
+- tapOn: "Publicar Nova Regra (v2)"
+
+- extendedWaitUntil:
+    visible: "OK"
+    timeout: 10000
+
+- tapOn: "OK"
+
+# 5. Valida Atualização do Card para v2 (Cache invalidado)
+- scrollUntilVisible:
+    element: "v2"
+    direction: UP
+    timeout: 10000
+
+- assertVisible: ".*Fidelidade R\\$ 5.*"
+- assertVisible: "v2"
+
+# Valida no Histórico a existência de v2 (Ativa) e v1 (Inativa)
+- tapOn: "Histórico"
+- extendedWaitUntil:
+    visible: "Versão 2"
+    timeout: 5000
+
+- assertVisible: "Versão 1"
+- assertVisible: "Inativa"

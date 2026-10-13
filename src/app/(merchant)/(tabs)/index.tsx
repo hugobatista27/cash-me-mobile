@@ -5,11 +5,13 @@ import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { EstablishmentProfile, useAuthStore } from '@/stores/use-auth-store';
+import { useActiveLoyaltyRule } from '@/hooks/useLoyaltyRules';
 
 export default function MerchantDashboardScreen() {
   const router = useRouter();
   const { user, profile, establishment } = useAuthStore();
   const establishmentProfile = profile as EstablishmentProfile | null;
+  const { data: activeRule, isLoading: isLoadingRule } = useActiveLoyaltyRule();
 
   const tradeName = establishment?.tradeName || 'Meu Comércio';
   const isPending = establishment?.status === 'PENDING';
@@ -54,9 +56,33 @@ export default function MerchantDashboardScreen() {
             Gestão Ativa
           </Text>
 
-          <Text className="text-white/90 text-sm mb-4">
+          <Text className="text-white/90 text-sm mb-3">
             CNPJ: {establishment?.cnpj || 'Não informado'}
           </Text>
+
+          {/* Regra Ativa de Pontos */}
+          <View className="bg-white/10 rounded-2xl p-3.5 mb-3 border border-white/15">
+            <View className="flex-row items-center justify-between mb-1">
+              <View className="flex-row items-center gap-1.5">
+                <Ionicons name="sparkles" size={14} color="#F5B800" />
+                <Text className="text-white text-xs font-bold uppercase tracking-wider">
+                  Regra de Pontos Vigente
+                </Text>
+              </View>
+              {activeRule && (
+                <View className="bg-pontos px-2 py-0.5 rounded-full">
+                  <Text className="text-neutros-texto text-[10px] font-black">
+                    v{activeRule.version}
+                  </Text>
+                </View>
+              )}
+            </View>
+            <Text className="text-white font-medium text-xs">
+              {isLoadingRule
+                ? 'Carregando regra...'
+                : activeRule?.humanReadableSummary || 'Nenhuma regra ativa configurada.'}
+            </Text>
+          </View>
 
           <View className="flex-row items-center gap-2 pt-2 border-t border-white/20">
             <Ionicons name="person-circle" size={16} color="#FFFFFF" />
