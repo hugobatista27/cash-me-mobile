@@ -2,14 +2,63 @@ appId: host.exp.exponent
 ---
 # ==============================================================================
 # Suíte de Testes E2E Maestro - TASK-06: Interface do Lojista (Regras & Simulador)
-# 1. Validação da Regra Ativa Vigente (Card com resumo humano)
-# 2. Simulação em Tempo Real com Debounce
-# 3. Navegação e Auditoria de Histórico de Regras (RN04)
-# 4. Publicação e Versionamento de Nova Regra (v2)
-# 5. Invalidação de Cache e Atualização Instantânea da UI
+# 1. Autenticação Real do Lojista (ou reaproveitamento de sessão ativa)
+# 2. Validação da Regra Ativa Vigente (Card com resumo humano)
+# 3. Simulação em Tempo Real com Debounce
+# 4. Navegação e Auditoria de Histórico de Regras (RN04)
+# 5. Publicação e Versionamento de Nova Regra (v2)
+# 6. Invalidação de Cache e Atualização Instantânea da UI
+# 7. Logout para Higienização do Estado
 # ==============================================================================
 
-# 1. Garante que está na tela de Regras
+# Se estiver na tela de histórico de regras de execução anterior, volta para tabs
+- runFlow:
+    when:
+      visible: "Histórico de Regras"
+    commands:
+      - tapOn: "Voltar"
+
+# Se estiver na tela de consumidor logado por engano, desloga primeiro
+- runFlow:
+    when:
+      visible: "Área do Consumidor"
+    commands:
+      - tapOn: "Perfil"
+      - extendedWaitUntil:
+          visible: "Encerrar Sessão"
+          timeout: 10000
+      - tapOn: "Encerrar Sessão"
+      - extendedWaitUntil:
+          visible: "Sair"
+          timeout: 5000
+      - tapOn: "Sair"
+
+# ------------------------------------------------------------------------------
+# PARTE 1: LOGIN DO LOJISTA (CASO ESTEJA NA TELA DE LOGIN)
+# ------------------------------------------------------------------------------
+- runFlow:
+    when:
+      visible: "Bem-vindo ao CashMe"
+    commands:
+      - tapOn: "seu.email@exemplo.com"
+      - eraseText: 50
+      - inputText: "lojista.live3@cashme.com"
+      - hideKeyboard
+
+      - tapOn: "Sua senha secreta"
+      - eraseText: 50
+      - inputText: "password123"
+      - hideKeyboard
+
+      - tapOn: "Entrar"
+
+      - extendedWaitUntil:
+          visible: "Painel do Estabelecimento"
+          timeout: 15000
+
+# ------------------------------------------------------------------------------
+# PARTE 2: NAVEGAÇÃO PARA A TELA DE REGRAS E VALIDAÇÃO DA REGRA ATIVA
+# ------------------------------------------------------------------------------
 - tapOn: "Regras"
 
 - extendedWaitUntil:
@@ -20,7 +69,9 @@ appId: host.exp.exponent
 - assertVisible: "Regra Ativa Oficial"
 - assertVisible: "v1"
 
-# 2. Testa o Simulador em Tempo Real (Limpa o valor anterior antes de digitar)
+# ------------------------------------------------------------------------------
+# PARTE 3: SIMULADOR EM TEMPO REAL
+# ------------------------------------------------------------------------------
 - tapOn:
     below: "Valor da Compra (R$)"
 - eraseText: 20
@@ -31,7 +82,9 @@ appId: host.exp.exponent
     visible: "250 pts"
     timeout: 5000
 
-# 3. Navega para o Histórico de Regras
+# ------------------------------------------------------------------------------
+# PARTE 4: AUDITORIA DO HISTÓRICO DE REGRAS
+# ------------------------------------------------------------------------------
 - tapOn: "Histórico"
 - extendedWaitUntil:
     visible: "Histórico de Regras"
@@ -48,7 +101,9 @@ appId: host.exp.exponent
     visible: "Regras e Simulador"
     timeout: 5000
 
-# 4. Publica Nova Versão da Regra (v2)
+# ------------------------------------------------------------------------------
+# PARTE 5: PUBLICAÇÃO E VERSIONAMENTO DE NOVA REGRA (v2)
+# ------------------------------------------------------------------------------
 - scroll
 
 # Edita o nome da regra
@@ -76,7 +131,9 @@ appId: host.exp.exponent
 
 - tapOn: "OK"
 
-# 5. Valida Atualização do Card para v2 (Cache invalidado)
+# ------------------------------------------------------------------------------
+# PARTE 6: INVALIDAÇÃO DE CACHE E ATUALIZAÇÃO INSTANTÂNEA DA UI
+# ------------------------------------------------------------------------------
 - scrollUntilVisible:
     element: "v2"
     direction: UP
@@ -93,3 +150,31 @@ appId: host.exp.exponent
 
 - assertVisible: "Versão 1"
 - assertVisible: "Inativa"
+
+# Retorna para a tela de regras
+- tapOn: "Voltar"
+
+- extendedWaitUntil:
+    visible: "Regras e Simulador"
+    timeout: 5000
+
+# ------------------------------------------------------------------------------
+# PARTE 7: LOGOUT PARA HIGIENIZAÇÃO DO ESTADO
+# ------------------------------------------------------------------------------
+- tapOn: "Perfil Loja"
+
+- extendedWaitUntil:
+    visible: "Encerrar Sessão"
+    timeout: 10000
+
+- tapOn: "Encerrar Sessão"
+
+- extendedWaitUntil:
+    visible: "Sair"
+    timeout: 5000
+
+- tapOn: "Sair"
+
+- extendedWaitUntil:
+    visible: "Bem-vindo ao CashMe"
+    timeout: 10000

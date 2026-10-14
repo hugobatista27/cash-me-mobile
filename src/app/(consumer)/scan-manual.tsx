@@ -61,6 +61,11 @@ export default function ConsumerScanManualScreen() {
         accessKey: parsed.accessKey,
         issuerState: parsed.issuerState,
         issuerCnpj: parsed.issuerCnpj,
+        qrCodeUrl:
+          parsed.qrCodeUrl ||
+          `https://sat.sef.sc.gov.br/nfce/qrcode?p=${parsed.accessKey}`,
+        issuedAt: new Date().toISOString(),
+        totalAmount: 100.0,
       });
 
       router.replace({

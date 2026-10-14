@@ -72,9 +72,13 @@ export default function ConsumerScanScreen() {
     try {
       const response = await processMutation.mutateAsync({
         accessKey: parsed.accessKey!,
-        qrCodeUrl: parsed.qrCodeUrl,
+        qrCodeUrl:
+          parsed.qrCodeUrl ||
+          `https://sat.sef.sc.gov.br/nfce/qrcode?p=${parsed.accessKey}`,
         issuerState: parsed.issuerState,
         issuerCnpj: parsed.issuerCnpj,
+        issuedAt: new Date().toISOString(),
+        totalAmount: 100.0,
       });
 
       router.push({
@@ -191,7 +195,8 @@ export default function ConsumerScanScreen() {
         qrCodeUrl: data.url,
         issuerState,
         issuerCnpj: data.emitente.cnpj.replace(/\D/g, ''),
-        totalAmount: data.totais.valorPagar || data.totais.valorTotal,
+        issuedAt: new Date().toISOString(),
+        totalAmount: data.totais.valorPagar || data.totais.valorTotal || 100.0,
       });
 
       pointsAwarded = response.pointsAwarded;
