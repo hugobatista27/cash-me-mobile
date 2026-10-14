@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react-native';
+import { render, fireEvent } from '@testing-library/react-native';
 import { NfceResultView } from '../NfceResultView';
 import { NfceData } from '@/utils/nfceParser';
 
@@ -47,8 +47,8 @@ describe('NfceResultView', () => {
     rawHtmlLength: 1024,
   };
 
-  it('deve renderizar dados do emitente, chave de acesso e total a pagar', () => {
-    render(
+  it('deve renderizar dados do emitente, chave de acesso e total a pagar', async () => {
+    const { getByText } = await render(
       <NfceResultView
         data={mockNfceData}
         pointsAwarded={35}
@@ -57,34 +57,34 @@ describe('NfceResultView', () => {
       />
     );
 
-    expect(screen.getByText('Padaria Central E2E Ltda')).toBeTruthy();
-    expect(screen.getByText(/CNPJ: 50\.401\.244\/0001-54/)).toBeTruthy();
-    expect(screen.getByText(/\+35/)).toBeTruthy();
-    expect(screen.getByText(/Novo saldo na loja: 120 pts/)).toBeTruthy();
+    expect(getByText('Padaria Central E2E Ltda')).toBeTruthy();
+    expect(getByText(/CNPJ: 50\.401\.244\/0001-54/)).toBeTruthy();
+    expect(getByText(/\+35/)).toBeTruthy();
+    expect(getByText(/Novo saldo na loja: 120 pts/)).toBeTruthy();
   });
 
-  it('deve listar os itens da NFC-e corretamente', () => {
-    render(
+  it('deve listar os itens da NFC-e corretamente', async () => {
+    const { getByText } = await render(
       <NfceResultView
         data={mockNfceData}
         onReset={jest.fn()}
       />
     );
 
-    expect(screen.getByText('Pão Francês KG')).toBeTruthy();
-    expect(screen.getByText('Café Espresso')).toBeTruthy();
+    expect(getByText('Pão Francês KG')).toBeTruthy();
+    expect(getByText('Café Espresso')).toBeTruthy();
   });
 
-  it('deve acionar onReset ao clicar em Escanear Outra Nota', () => {
+  it('deve acionar onReset ao clicar em Escanear Outra Nota', async () => {
     const onResetMock = jest.fn();
-    render(
+    const { getByText } = await render(
       <NfceResultView
         data={mockNfceData}
         onReset={onResetMock}
       />
     );
 
-    fireEvent.press(screen.getByText('Escanear Outra Nota'));
+    fireEvent.press(getByText('Escanear Outra Nota'));
     expect(onResetMock).toHaveBeenCalledTimes(1);
   });
 });
