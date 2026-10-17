@@ -1,0 +1,266 @@
+appId: host.exp.exponent
+---
+# ==============================================================================
+# Suíte de Testes E2E Maestro - TASK-05: Exploração de Lojas Credenciadas e Vitrine
+#
+# Escopo de Validação:
+# 1. Autenticação do Consumidor (ou reaproveitamento de sessão ativa)
+# 2. Navegação para a aba 'Lojas'
+# 3. Validação do catálogo de lojas credenciadas com status ACTIVE (RN06) e badge RN04
+# 4. Teste de busca em tempo real com debounce (filtragem por termo)
+# 5. Navegação para a tela de detalhes do estabelecimento (/store/[id])
+# 6. Validação dos dados detalhados (Nome Fantasia, CNPJ formatado, regra de pontuação, endereço, canais de contato)
+# 7. Ação "Escanear Nota Desta Loja" e redirecionamento para o scanner (/scan)
+# 8. Navegação de retorno à aba de Lojas
+# 9. Logout para higienização do estado da aplicação
+# ==============================================================================
+
+# Abre a aplicação Expo Go no Metro Bundler
+- openLink: "exp://10.0.2.2:8081"
+
+# Aguarda a interface carregar (Área do Consumidor, Painel do Estabelecimento ou Login)
+- extendedWaitUntil:
+    visible: ".*(CashMe|Consumidor|Estabelecimento).*"
+    timeout: 15000
+
+# Se estiver na tela de detalhes da loja de execução anterior, volta para a lista
+- runFlow:
+    when:
+      visible: "Voltar"
+    commands:
+      - tapOn: "Voltar"
+
+# Se estiver na tela do lojista por engano, encerra a sessão
+- runFlow:
+    when:
+      visible: "Painel do Estabelecimento"
+    commands:
+      - tapOn: "Perfil Loja"
+      - extendedWaitUntil:
+          visible: "Encerrar Sessão"
+          timeout: 5000
+      - tapOn: "Encerrar Sessão"
+      - extendedWaitUntil:
+          visible: "Sair"
+          timeout: 5000
+      - tapOn: "Sair"
+
+# ------------------------------------------------------------------------------
+# PARTE 1: LOGIN DO CONSUMIDOR (CASO ESTEJA NA TELA DE LOGIN)
+# ------------------------------------------------------------------------------
+- runFlow:
+    when:
+      visible: "Bem-vindo ao CashMe"
+    commands:
+      - tapOn: "seu.email@exemplo.com"
+      - eraseText: 50
+      - inputText: "cliente.live3@cashme.com"
+      - hideKeyboard
+
+      - tapOn: "Sua senha secreta"
+      - eraseText: 50
+      - inputText: "password123"
+      - hideKeyboard
+
+      - tapOn: "Entrar"
+
+      - extendedWaitUntil:
+          visible: "Área do Consumidor"
+          timeout: 10000
+
+# Se houver texto remanescente no campo de busca de execução anterior, limpa
+- runFlow:
+    when:
+      visible: "Buscar por loja, cidade ou bairro..."
+    commands:
+      - tapOn: "Buscar por loja, cidade ou bairro..."
+      - eraseText: 50
+      - hideKeyboard
+
+- runFlow:
+    when:
+      visible: "Nenhuma loja encontrada"
+    commands:
+      - tapOn:
+          below: "Lojas Credenciadas"
+      - eraseText: 50
+      - hideKeyboard
+
+# ------------------------------------------------------------------------------
+# PARTE 2: NAVEGAÇÃO PARA A ABA 'LOJAS'
+# ------------------------------------------------------------------------------
+- tapOn: "Lojas"
+
+- extendedWaitUntil:
+    visible: "Lojas Credenciadas"
+    timeout: 10000
+
+- assertVisible: "Rede Parceira"
+- assertVisible: "Lojas Credenciadas"
+
+# Se o campo de busca estiver com algum termo digitado, limpa e aguarda debounce
+- tapOn:
+    below: "Compre nos estabelecimentos parceiros e ganhe pontos no cupom fiscal."
+- eraseText: 50
+- hideKeyboard
+
+- extendedWaitUntil:
+    visible: "Padaria Central E2E"
+    timeout: 10000
+
+# ------------------------------------------------------------------------------
+# PARTE 3: VALIDAÇÃO DA LISTAGEM DE ESTABELECIMENTOS ATIVOS (RN06) E BADGE (RN04)
+# ------------------------------------------------------------------------------
+- assertVisible: "Buscar por loja, cidade ou bairro..."
+- assertVisible: "Padaria Central E2E"
+- assertVisible: "R$ 5 = 1 pt"
+
+# Valida que estabelecimentos PENDING não aparecem na listagem (RN06)
+- assertNotVisible: "Super Loja"
+
+# ------------------------------------------------------------------------------
+# PARTE 4: TESTE DE BUSCA EM TEMPO REAL COM DEBOUNCE
+# ------------------------------------------------------------------------------
+# Busca por termo inexistente
+- tapOn: "Buscar por loja, cidade ou bairro..."
+- eraseText: 50
+- inputText: "LojaInexistenteXYZ"
+- hideKeyboard
+
+# Aguarda debounce e valida estado vazio
+- extendedWaitUntil:
+    visible: "Nenhuma loja encontrada"
+    timeout: 5000
+
+- assertVisible: "Nenhuma loja encontrada"
+- assertVisible: ".*Nenhum resultado para.*"
+
+# Limpa a busca e busca por termo existente ("Padaria")
+- tapOn:
+    below: "Compre nos estabelecimentos parceiros e ganhe pontos no cupom fiscal."
+- eraseText: 50
+- hideKeyboard
+
+# Aguarda debounce da limpeza
+- extendedWaitUntil:
+    visible: "Padaria Central E2E"
+    timeout: 5000
+
+# Digita termo existente ("Padaria")
+- tapOn: "Buscar por loja, cidade ou bairro..."
+- eraseText: 50
+- inputText: "Padaria"
+- hideKeyboard
+
+# Valida que a loja reaparece filtrada
+- extendedWaitUntil:
+    visible: "Padaria Central E2E"
+    timeout: 5000
+
+- assertVisible: "Padaria Central E2E"
+
+# ------------------------------------------------------------------------------
+# PARTE 5: NAVEGAÇÃO PARA A TELA DE DETALHES (/store/[id])
+# ------------------------------------------------------------------------------
+- tapOn: "Padaria Central E2E"
+
+- extendedWaitUntil:
+    visible: "Regra de Pontuação Vigente"
+    timeout: 10000
+
+# ------------------------------------------------------------------------------
+# PARTE 6: VALIDAÇÃO DOS DADOS DO ESTABELECIMENTO
+# ------------------------------------------------------------------------------
+# Nome Fantasia e Razão Social
+- assertVisible: "Padaria Central E2E"
+- assertVisible: "Padaria Central E2E Ltda"
+
+# CNPJ Formatado: 50.401.244/0001-54
+- assertVisible: ".*50\\.401\\.244/0001-54.*"
+
+# Status e Badge da Regra
+- assertVisible: "Parceiro Oficial Credenciado"
+- assertVisible: "R$ 5 = 1 pt"
+- assertVisible: "A cada R$ 5,00 gastos ganhe 1 ponto"
+
+# Endereço
+- assertVisible: "Endereço"
+- assertVisible: ".*Rua Felipe Schmidt, 450.*"
+- assertVisible: "Abrir no Mapa"
+
+# Canais de Contato
+- assertVisible: "Canais de Contato"
+- assertVisible: "WhatsApp"
+- assertVisible: ".*99999-8888.*"
+- assertVisible: "Telefone"
+- assertVisible: ".*3333-4444.*"
+- assertVisible: "Instagram"
+- assertVisible: "@padariacentral"
+
+# ------------------------------------------------------------------------------
+# PARTE 7: REDIRECIONAMENTO PARA O SCANNER ("Escanear Nota Desta Loja")
+# ------------------------------------------------------------------------------
+- scroll
+- assertVisible: "Escanear Nota Desta Loja"
+- tapOn: "Escanear Nota Desta Loja"
+
+# Trata possíveis diálogos de permissão de câmera
+- runFlow:
+    when:
+      visible: "Permitir Acesso à Câmera"
+    commands:
+      - tapOn: "Permitir Acesso à Câmera"
+
+- runFlow:
+    when:
+      visible: "ALLOW"
+    commands:
+      - tapOn: "ALLOW"
+
+- runFlow:
+    when:
+      visible: "While using the app"
+    commands:
+      - tapOn: "While using the app"
+
+# Valida que foi redirecionado para a tela de Escanear QR Code
+- extendedWaitUntil:
+    visible: "Digitar Chave de 44 Dígitos"
+    timeout: 10000
+
+- assertVisible: "Escanear QR Code"
+
+# ------------------------------------------------------------------------------
+# PARTE 8: RETORNO À LISTA DE LOJAS
+# ------------------------------------------------------------------------------
+- tapOn: "Lojas"
+
+- extendedWaitUntil:
+    visible: "Lojas Credenciadas"
+    timeout: 10000
+
+- assertVisible: "Lojas Credenciadas"
+- assertVisible: "Padaria Central E2E"
+
+# ------------------------------------------------------------------------------
+# PARTE 9: LOGOUT PARA HIGIENIZAÇÃO DO ESTADO
+# ------------------------------------------------------------------------------
+- tapOn: "Perfil"
+
+- extendedWaitUntil:
+    visible: "Encerrar Sessão"
+    timeout: 10000
+
+- tapOn: "Encerrar Sessão"
+
+- extendedWaitUntil:
+    visible: "Sair"
+    timeout: 5000
+
+- tapOn: "Sair"
+
+- extendedWaitUntil:
+    visible: "Bem-vindo ao CashMe"
+    timeout: 10000
+
+- assertVisible: "Bem-vindo ao CashMe"

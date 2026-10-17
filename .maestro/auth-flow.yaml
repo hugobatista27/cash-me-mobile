@@ -29,9 +29,9 @@ appId: host.exp.exponent
 #    - Login de Lojista válido -> verificação -> Logout final.
 # ==============================================================================
 
-# ------------------------------------------------------------------------------
-# HIGIENIZAÇÃO INICIAL DE QUALQUER SESSÃO REMANESCENTE
-# ------------------------------------------------------------------------------
+# Abre a experiência do Expo Go na raiz da aplicação
+- openLink: "exp://10.0.2.2:8081"
+
 - runFlow:
     when:
       visible: "Perfil Loja"
@@ -62,7 +62,7 @@ appId: host.exp.exponent
 
 - extendedWaitUntil:
     visible: "Bem-vindo ao CashMe"
-    timeout: 10000
+    timeout: 15000
 
 # ------------------------------------------------------------------------------
 # PARTE 1: TENTATIVAS INCORRETAS DE LOGIN
@@ -279,6 +279,8 @@ appId: host.exp.exponent
 - inputText: "Comércio E2E"
 - hideKeyboard
 
+- scroll
+
 - tapOn: "(00) 0000-0000"
 - inputText: "1133334444"
 - hideKeyboard
@@ -339,16 +341,15 @@ appId: host.exp.exponent
 - scroll
 - tapOn: "Cadastrar Comércio"
 
-- extendedWaitUntil:
-    visible: "Falha no cadastro do estabelecimento. Verifique os dados informados."
+# Rola até o topo para visualizar o banner de erro que é renderizado acima do formulário
+- scrollUntilVisible:
+    element: "Falha no cadastro do estabelecimento. Verifique os dados informados."
+    direction: UP
     timeout: 7000
 
-# 3.3 Sucesso no cadastro de lojista com e-mail único
-- scrollUntilVisible:
-    element: "contato@minhaloja.com"
-    direction: UP
-    timeout: 5000
+- assertVisible: "Falha no cadastro do estabelecimento. Verifique os dados informados."
 
+# 3.3 Sucesso no cadastro de lojista com e-mail único
 - tapOn: "contato@minhaloja.com"
 - eraseText: 50
 - inputText: ${output.dynamicMerchantEmail}
