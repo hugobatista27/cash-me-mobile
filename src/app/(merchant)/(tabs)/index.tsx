@@ -94,7 +94,7 @@ export default function MerchantDashboardScreen() {
 
         {/* Ações Rápidas do Lojista */}
         <Text className="text-lg font-bold text-neutros-texto mb-3">Gerenciamento</Text>
-        <View className="flex-row gap-3 mb-6">
+        <View className="flex-row gap-3 mb-3">
           <TouchableOpacity
             onPress={() => router.push('/(merchant)/(tabs)/rules')}
             activeOpacity={0.8}
@@ -119,6 +119,29 @@ export default function MerchantDashboardScreen() {
             <Text className="text-xs text-neutros-cinza text-center mt-1">Base de fidelidade</Text>
           </TouchableOpacity>
         </View>
+
+        {/* Atalho de Acesso: Recompensas / Cupons (TASK-10) */}
+        <TouchableOpacity
+          testID="shortcut-merchant-rewards"
+          onPress={() => router.push('/(merchant)/rewards')}
+          activeOpacity={0.8}
+          className="bg-white p-4 rounded-2xl border border-neutros-borda flex-row items-center justify-between shadow-sm mb-6"
+        >
+          <View className="flex-row items-center gap-3.5 flex-1">
+            <View className="w-12 h-12 rounded-xl bg-lojista/10 items-center justify-center">
+              <Ionicons name="gift" size={24} color="#6F35B5" />
+            </View>
+            <View className="flex-1">
+              <Text className="text-sm font-bold text-neutros-texto">
+                Recompensas / Cupons
+              </Text>
+              <Text className="text-xs text-neutros-cinza mt-0.5">
+                Gerenciar catálogo de descontos em R$ e %
+              </Text>
+            </View>
+          </View>
+          <Ionicons name="chevron-forward" size={20} color="#6F35B5" />
+        </TouchableOpacity>
 
         {/* Informações Regulatórias */}
         <View className="bg-white p-5 rounded-2xl border border-neutros-borda">
