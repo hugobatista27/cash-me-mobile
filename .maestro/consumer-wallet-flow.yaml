@@ -1,0 +1,334 @@
+appId: host.exp.exponent
+---
+# ==============================================================================
+# Suíte de Testes E2E Maestro - TASK-04: Carteira Digital, Saldos Isolados e Extratos
+#
+# Escopo de Validação:
+# 1. Abertura do app via Expo ('exp://10.0.2.2:8081')
+# 2. Cenário A: Carteira Vazia (usuário sem histórico/saldos):
+#    - Login com 'cliente.live@cashme.com' / 'password123';
+#    - Navegação até a aba 'Carteira' (/wallet);
+#    - Validação de 'Carteira Digital' e 'Saldos por Loja (ADR-002)';
+#    - Validação do estado vazio amigável: 'Sua carteira ainda está vazia' e botão 'Escanear Primeira Nota';
+#    - Toque no botão 'Escanear Primeira Nota' e validação do redirecionamento para o scanner (/scan);
+#    - Logout via Perfil -> 'Encerrar Sessão' -> 'Sair'.
+# 3. Cenário B: Carteira com Saldos Isolados (usuário ativo com histórico):
+#    - Login com 'cliente.live3@cashme.com' / 'password123';
+#    - Validação da Home (Início) com resumo de pontos agregados e atalhos rápidos ('Escanear Nota');
+#    - Navegação até a aba 'Carteira' (/wallet);
+#    - Validação do Card Agregado ('Total Agregado', 'pts ativos', 'Acumulado Vida');
+#    - Validação dos cards de estabelecimentos com saldos isolados:
+#      * Loja ativa ('Padaria Central E2E', CNPJ formatado, saldo e acumulado);
+#      * Tratamento de loja inativa / pendente (RN05: 'Loja temporariamente inativa para novos pontos (RN05: seu saldo está protegido)');
+#    - Teste de rolagem/pull-to-refresh na lista de saldos;
+#    - Toque no card de 'Padaria Central E2E' para abrir o Extrato Detalhado (/statement/[id]);
+# 4. Validação do Extrato Detalhado (/statement/[id]):
+#    - Cabeçalho com nome do estabelecimento e CNPJ;
+#    - Saldo exclusivo da loja ('Saldo Exclusivo', 'Saldo Atual Disponível');
+#    - Lista de movimentações (Crédito, data, valor da compra em R$ e pontos);
+#    - Toque no link 'Ver nota' para abrir os detalhes fiscais da NFC-e (/invoice/[id]);
+# 5. Validação dos Detalhes da Nota Fiscal (/invoice/[id]):
+#    - Cabeçalho 'NFC-e Processada' / 'Comprovante';
+#    - Celebração de pontos creditados ('+20 pts', nome da loja);
+#    - Informações fiscais: status 'Processada', valor da compra e chave de 44 dígitos;
+#    - Retorno seguro tocando no botão fechar ou voltar;
+# 6. Retorno à Carteira e Logout:
+#    - Retorno para a Carteira através do botão 'Voltar';
+#    - Navegação até a aba 'Perfil' e logout ('Encerrar Sessão' -> 'Sair') para higienizar o estado.
+# ==============================================================================
+
+# Abre a aplicação Expo Go no Metro Bundler
+- openLink: "exp://10.0.2.2:8081"
+
+# Aguarda a interface carregar
+- extendedWaitUntil:
+    visible: ".*(CashMe|Consumidor|Estabelecimento|Carteira).*"
+    timeout: 15000
+
+# Se estiver na tela de detalhes de nota, fecha e volta
+- runFlow:
+    when:
+      visible: "Fechar"
+    commands:
+      - tapOn: "Fechar"
+
+# Se estiver na tela de extrato ou outra rota em stack, volta
+- runFlow:
+    when:
+      visible: "Extrato da Loja"
+    commands:
+      - tapOn: "Voltar"
+
+# Se houver sessão de lojista ativa, encerra
+- runFlow:
+    when:
+      visible: "Painel do Estabelecimento"
+    commands:
+      - tapOn: "Perfil Loja"
+      - extendedWaitUntil:
+          visible: "Encerrar Sessão"
+          timeout: 5000
+      - tapOn: "Encerrar Sessão"
+      - extendedWaitUntil:
+          visible: "Sair"
+          timeout: 5000
+      - tapOn: "Sair"
+
+# Se houver sessão de consumidor ativa em qualquer aba, navega para Perfil e encerra
+- runFlow:
+    when:
+      visible: "Perfil"
+    commands:
+      - tapOn: "Perfil"
+      - extendedWaitUntil:
+          visible: "Encerrar Sessão"
+          timeout: 5000
+      - tapOn: "Encerrar Sessão"
+      - extendedWaitUntil:
+          visible: "Sair"
+          timeout: 5000
+      - tapOn: "Sair"
+
+# ------------------------------------------------------------------------------
+# PARTE 1: CENÁRIO DE CARTEIRA VAZIA (cliente.live@cashme.com)
+# ------------------------------------------------------------------------------
+- extendedWaitUntil:
+    visible: "Bem-vindo ao CashMe"
+    timeout: 10000
+
+- tapOn: "seu.email@exemplo.com"
+- eraseText: 50
+- inputText: "cliente.live@cashme.com"
+- hideKeyboard
+
+- tapOn: "Sua senha secreta"
+- eraseText: 50
+- inputText: "password123"
+- hideKeyboard
+
+- tapOn: "Entrar"
+
+- extendedWaitUntil:
+    visible: "Área do Consumidor"
+    timeout: 10000
+
+# Navega para a aba Carteira
+- tapOn: "Carteira"
+
+- extendedWaitUntil:
+    visible: "Carteira Digital"
+    timeout: 10000
+
+- assertVisible: ".*SALDOS POR LOJA.*"
+- assertVisible: "Carteira Digital"
+
+# Valida estado vazio amigável e botão de ação
+- extendedWaitUntil:
+    visible: "Sua carteira ainda está vazia"
+    timeout: 5000
+
+- assertVisible: "Sua carteira ainda está vazia"
+- assertVisible: "Escanear Primeira Nota"
+
+# Toque no botão 'Escanear Primeira Nota' redireciona para a aba de scanner (/scan)
+- tapOn: "Escanear Primeira Nota"
+
+# Tratamento de permissão de câmera se solicitada
+- runFlow:
+    when:
+      visible: "Permitir Acesso à Câmera"
+    commands:
+      - tapOn: "Permitir Acesso à Câmera"
+- runFlow:
+    when:
+      visible: "ALLOW"
+    commands:
+      - tapOn: "ALLOW"
+- runFlow:
+    when:
+      visible: "While using the app"
+    commands:
+      - tapOn: "While using the app"
+
+- extendedWaitUntil:
+    visible: "Digitar Chave de 44 Dígitos"
+    timeout: 10000
+
+- assertVisible: "Escanear QR Code"
+
+# Logout do cliente sem saldo
+- tapOn: "Perfil"
+
+- extendedWaitUntil:
+    visible: "Encerrar Sessão"
+    timeout: 10000
+
+- tapOn: "Encerrar Sessão"
+
+- extendedWaitUntil:
+    visible: "Sair"
+    timeout: 5000
+
+- tapOn: "Sair"
+
+- extendedWaitUntil:
+    visible: "Bem-vindo ao CashMe"
+    timeout: 10000
+
+# ------------------------------------------------------------------------------
+# PARTE 2: CENÁRIO DE CARTEIRA COM SALDOS ATIVOS (cliente.live3@cashme.com)
+# ------------------------------------------------------------------------------
+- tapOn: "seu.email@exemplo.com"
+- eraseText: 50
+- inputText: "cliente.live3@cashme.com"
+- hideKeyboard
+
+- tapOn: "Sua senha secreta"
+- eraseText: 50
+- inputText: "password123"
+- hideKeyboard
+
+- tapOn: "Entrar"
+
+- extendedWaitUntil:
+    visible: "Área do Consumidor"
+    timeout: 10000
+
+# Validações da Home (Início)
+- assertVisible: "Área do Consumidor"
+- assertVisible: "Pontos Acumulados"
+- assertVisible: "CashMe Club"
+- assertVisible: "Saldos isolados e protegidos por estabelecimento"
+- assertVisible: "Escanear Nota"
+- assertVisible: "Lojas Parceiras"
+
+# Navega até a aba Carteira
+- tapOn: "Carteira"
+
+- extendedWaitUntil:
+    visible: "Carteira Digital"
+    timeout: 10000
+
+- assertVisible: ".*SALDOS POR LOJA.*"
+- assertVisible: "Carteira Digital"
+
+# Valida o Card Agregado no topo da Carteira
+- extendedWaitUntil:
+    visible: ".*Total Agregado.*"
+    timeout: 10000
+
+- assertVisible: ".*Total Agregado.*"
+- assertVisible: ".*pts ativos.*"
+- assertVisible: "Acumulado Vida"
+
+# Valida o card da loja ativa (Padaria Central E2E)
+- assertVisible: "Padaria Central E2E"
+- assertVisible: ".*50\\.401\\.244/0001-54.*"
+- assertVisible: "60"
+- assertVisible: "Ver extrato detalhado"
+
+# Valida tratamento de estabelecimento pendente/inativo com preservação de saldo (RN05)
+- assertVisible: "Super Loja"
+- assertVisible: ".*Loja temporariamente inativa para novos pontos.*"
+
+# Testa scroll / rolagem na Carteira
+- scroll
+
+# ------------------------------------------------------------------------------
+# PARTE 3: NAVEGAÇÃO E VALIDAÇÃO DO EXTRATO DETALHADO (/statement/[id])
+# ------------------------------------------------------------------------------
+- tapOn: "Padaria Central E2E"
+
+- extendedWaitUntil:
+    visible: "Extrato da Loja"
+    timeout: 10000
+
+- assertVisible: "Extrato da Loja"
+- assertVisible: "Padaria Central E2E"
+- assertVisible: ".*50\\.401\\.244/0001-54.*"
+- assertVisible: "Saldo Exclusivo"
+- assertVisible: "Saldo Atual Disponível"
+- assertVisible: "60"
+- assertVisible: ".*Total acumulado nesta loja: 60 pts.*"
+- assertVisible: "Pontuar"
+
+# Valida lançamentos do extrato
+- assertVisible: ".*Pontos por compra em Padaria Central E2E.*"
+- assertVisible: ".*\\+20 pts.*"
+- assertVisible: "Crédito"
+- assertVisible: "Ver nota"
+
+# ------------------------------------------------------------------------------
+# PARTE 4: NAVEGAÇÃO E VALIDAÇÃO DOS DETALHES FISCAIS DA NOTA (/invoice/[id])
+# ------------------------------------------------------------------------------
+- tapOn: "Ver nota"
+
+- extendedWaitUntil:
+    visible: "NFC-e Processada"
+    timeout: 10000
+
+- assertVisible: "NFC-e Processada"
+- assertVisible: "Comprovante"
+- assertVisible: "Pontos Creditados"
+- assertVisible: ".*\\+20.*"
+- assertVisible: "Padaria Central E2E"
+- assertVisible: "Informações da Nota Fiscal"
+- assertVisible: "Processada"
+- assertVisible: ".*100,00.*"
+- assertVisible: "Chave de Acesso (44 Dígitos)"
+- assertVisible: ".*4226.*"
+
+# Retorna da nota para o Extrato tocando no botão Fechar
+- tapOn: "Fechar"
+
+- extendedWaitUntil:
+    visible: "Extrato da Loja"
+    timeout: 10000
+
+- assertVisible: "Extrato da Loja"
+- assertVisible: "Padaria Central E2E"
+
+# ------------------------------------------------------------------------------
+# PARTE 5: RETORNO DO EXTRATO E NAVEGAÇÃO
+# ------------------------------------------------------------------------------
+- tapOn: "Voltar"
+
+- extendedWaitUntil:
+    visible: ".*(Carteira Digital|Área do Consumidor).*"
+    timeout: 10000
+
+# Se tiver voltado para a Home, navega para Carteira para validar presença do saldo
+- runFlow:
+    when:
+      visible: "Área do Consumidor"
+    commands:
+      - tapOn: "Carteira"
+      - extendedWaitUntil:
+          visible: "Carteira Digital"
+          timeout: 10000
+
+- assertVisible: "Carteira Digital"
+- assertVisible: "Padaria Central E2E"
+
+# ------------------------------------------------------------------------------
+# PARTE 6: HIGIENIZAÇÃO FINAL (LOGOUT)
+# ------------------------------------------------------------------------------
+- tapOn: "Perfil"
+
+- extendedWaitUntil:
+    visible: "Encerrar Sessão"
+    timeout: 10000
+
+- tapOn: "Encerrar Sessão"
+
+- extendedWaitUntil:
+    visible: "Sair"
+    timeout: 5000
+
+- tapOn: "Sair"
+
+- extendedWaitUntil:
+    visible: "Bem-vindo ao CashMe"
+    timeout: 10000
+
+- assertVisible: "Bem-vindo ao CashMe"

@@ -91,6 +91,13 @@ export const useAuthStore = create<AuthState>((set) => ({
     await removeAuthToken();
     await removeSessionData();
 
+    try {
+      const { queryClient } = await import('@/services/query-client');
+      queryClient.clear();
+    } catch {
+      // Ignora erro se queryClient não estiver pronto
+    }
+
     set({
       user: null,
       token: null,

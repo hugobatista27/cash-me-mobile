@@ -164,7 +164,13 @@ export default function ConsumerStatementScreen() {
       {/* Barra Superior */}
       <View className="flex-row items-center justify-between px-5 py-3 bg-white border-b border-neutros-borda/60">
         <TouchableOpacity
-          onPress={() => router.back()}
+          onPress={() => {
+            if (router.canGoBack()) {
+              router.back();
+            } else {
+              router.replace('/(consumer)/(tabs)/wallet');
+            }
+          }}
           accessibilityLabel="Voltar"
           accessibilityRole="button"
           className="w-10 h-10 rounded-full bg-neutros-fundo items-center justify-center border border-neutros-borda"

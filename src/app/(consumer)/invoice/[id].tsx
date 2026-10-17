@@ -81,7 +81,13 @@ export default function ConsumerInvoiceDetailsScreen() {
         {/* Header */}
         <View className="flex-row items-center justify-between mb-8">
           <TouchableOpacity
-            onPress={() => router.replace('/(consumer)/(tabs)')}
+            onPress={() => {
+              if (router.canGoBack()) {
+                router.back();
+              } else {
+                router.replace('/(consumer)/(tabs)');
+              }
+            }}
             accessibilityLabel="Fechar"
             accessibilityRole="button"
             className="w-11 h-11 rounded-full bg-white items-center justify-center border border-neutros-borda shadow-sm"
