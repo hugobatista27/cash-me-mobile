@@ -1,0 +1,269 @@
+appId: host.exp.exponent
+---
+# ==============================================================================
+# Suíte de Testes E2E Maestro - TASK-10: Gestão de Recompensas e Catálogo de Cupons
+#
+# Escopo de Validação:
+# 1. Autenticação do Lojista (ou higienização de sessão prévia de consumidor)
+# 2. Navegação a partir do Dashboard do Lojista através do atalho 'Recompensas / Cupons'
+# 3. Validação da tela de Catálogo de Recompensas (Header e Estado Vazio / Lista)
+# 4. Navegação para tela de criação via botão 'Nova Recompensa'
+# 5. Preenchimento completo do formulário (Título, Descrição, Tipo/Valor do Desconto,
+#    Custo em Pontos, Estoque e Validade em Dias)
+# 6. Validação em tempo real da Prévia do Cupom no topo do formulário
+# 7. Submissão do formulário ('Salvar Recompensa') e confirmação no Alert
+# 8. Validação do novo RewardCard na lista (Título, Desconto formatado, Pontos e Status Ativo)
+# 9. Teste do Toggle de Status (Desativar -> Inativo -> Ativar -> Ativo)
+# 10. Retorno ao Painel do Estabelecimento e Logout para higienização
+# ==============================================================================
+
+# Abre a aplicação Expo Go no Metro Bundler
+- openLink: "exp://10.0.2.2:8081"
+
+# Aguarda a interface carregar com timeout resiliente
+- extendedWaitUntil:
+    visible: ".*(CashMe|Consumidor|Estabelecimento|Recompensas).*"
+    timeout: 15000
+
+# Se estiver na tela de criação de recompensa de execução anterior, volta
+- runFlow:
+    when:
+      visible: "Nova Recompensa"
+    commands:
+      - tapOn:
+          label: "Voltar"
+
+# Se estiver na listagem de recompensas de execução anterior, volta ao painel
+- runFlow:
+    when:
+      visible: "Voltar para o painel"
+    commands:
+      - tapOn:
+          label: "Voltar para o painel"
+
+# Se estiver na tela de consumidor logado por engano, desloga primeiro
+- runFlow:
+    when:
+      visible: "Área do Consumidor"
+    commands:
+      - tapOn: "Perfil"
+      - extendedWaitUntil:
+          visible: "Encerrar Sessão"
+          timeout: 10000
+      - tapOn: "Encerrar Sessão"
+      - extendedWaitUntil:
+          visible: "Sair"
+          timeout: 5000
+      - tapOn: "Sair"
+
+# ------------------------------------------------------------------------------
+# PARTE 1: LOGIN DO LOJISTA (CASO ESTEJA NA TELA DE LOGIN)
+# ------------------------------------------------------------------------------
+- runFlow:
+    when:
+      visible: "Bem-vindo ao CashMe"
+    commands:
+      - tapOn: "seu.email@exemplo.com"
+      - eraseText: 50
+      - inputText: "lojista@supermercadoprogresso.com.br"
+      - hideKeyboard
+
+      - tapOn: "Sua senha secreta"
+      - eraseText: 50
+      - inputText: "password123"
+      - hideKeyboard
+
+      - tapOn: "Entrar"
+
+# Aguarda o Painel do Estabelecimento carregar
+- extendedWaitUntil:
+    visible: "Painel do Estabelecimento"
+    timeout: 15000
+
+- assertVisible: "Painel do Estabelecimento"
+- assertVisible: "Gestão Ativa"
+- assertVisible: "Status do Comércio"
+
+# ------------------------------------------------------------------------------
+# PARTE 2: ACESSO AO CATÁLOGO DE RECOMPENSAS PELO ATALHO
+# ------------------------------------------------------------------------------
+# Garante visibilidade do atalho rolando se necessário
+- scrollUntilVisible:
+    element:
+      id: "shortcut-merchant-rewards"
+    direction: DOWN
+    timeout: 8000
+
+- tapOn:
+    id: "shortcut-merchant-rewards"
+
+- extendedWaitUntil:
+    visible: "Recompensas & Cupons"
+    timeout: 10000
+
+- assertVisible: "Recompensas & Cupons"
+- assertVisible:
+    id: "new-reward-button"
+
+# ------------------------------------------------------------------------------
+# PARTE 3: ABERTURA DO FORMULÁRIO DE NOVA RECOMPENSA
+# ------------------------------------------------------------------------------
+- tapOn:
+    id: "new-reward-button"
+
+- extendedWaitUntil:
+    visible: "Nova Recompensa"
+    timeout: 10000
+
+- assertVisible: "Nova Recompensa"
+- assertVisible: "Prévia do Cupom"
+- assertVisible: "Título da Recompensa *"
+
+# ------------------------------------------------------------------------------
+# PARTE 4: PREENCHIMENTO DO FORMULÁRIO E VALIDAÇÃO DA PRÉVIA
+# ------------------------------------------------------------------------------
+# Preenche o Título
+- tapOn:
+    id: "input-reward-title"
+- eraseText: 50
+- inputText: "Cupom R$ 15 OFF"
+- hideKeyboard
+
+# Preenche a Descrição
+- tapOn:
+    id: "input-reward-description"
+- eraseText: 80
+- inputText: "Válido em compras acima de R$ 60,00"
+- hideKeyboard
+
+# Seleciona Tipo de Desconto: Valor Fixo (R$)
+- tapOn:
+    id: "selector-discount-fixed"
+
+# Preenche Valor do Desconto: 15,00
+- tapOn:
+    id: "input-reward-discount-value"
+- eraseText: 20
+- inputText: "15,00"
+- hideKeyboard
+
+# Preenche Custo em Pontos: 150
+- tapOn:
+    id: "input-reward-points-cost"
+- eraseText: 20
+- inputText: "150"
+- hideKeyboard
+
+# Preenche Estoque: 50
+- tapOn:
+    id: "input-reward-stock"
+- eraseText: 20
+- inputText: "50"
+- hideKeyboard
+
+# Preenche Validade em dias: 30
+- tapOn:
+    id: "input-reward-validity-days"
+- eraseText: 20
+- inputText: "30"
+- hideKeyboard
+
+# Rola para o topo para validar a prévia atualizada
+- scrollUntilVisible:
+    element:
+      text: "Prévia do Cupom"
+    direction: UP
+    timeout: 5000
+
+- assertVisible: "Cupom R$ 15 OFF"
+- assertVisible: "150 pts"
+- assertVisible: "R$ 15,00 OFF"
+
+# ------------------------------------------------------------------------------
+# PARTE 5: SALVAR RECOMPENSA E CONFIRMAÇÃO
+# ------------------------------------------------------------------------------
+- scrollUntilVisible:
+    element:
+      id: "submit-reward-button"
+    direction: DOWN
+    timeout: 8000
+
+- tapOn:
+    id: "submit-reward-button"
+
+- extendedWaitUntil:
+    visible: "Recompensa Criada"
+    timeout: 10000
+
+- assertVisible: "O cupom foi adicionado ao catálogo com sucesso!"
+- tapOn: "OK"
+
+# ------------------------------------------------------------------------------
+# PARTE 6: VALIDAÇÃO NA LISTAGEM DE RECOMPENSAS
+# ------------------------------------------------------------------------------
+- extendedWaitUntil:
+    visible: "Recompensas & Cupons"
+    timeout: 10000
+
+- assertVisible: "Cupom R$ 15 OFF"
+- assertVisible: "150 pts"
+- assertVisible: "R$ 15,00 OFF"
+- assertVisible: "Ativo"
+- assertVisible: "50 un."
+- assertVisible: "Desativar"
+
+# ------------------------------------------------------------------------------
+# PARTE 7: TESTE DO TOGGLE DE STATUS (DESATIVAR / ATIVAR)
+# ------------------------------------------------------------------------------
+# Desativa a recompensa
+- tapOn: "Desativar"
+
+- extendedWaitUntil:
+    visible: "Ativar"
+    timeout: 8000
+
+- assertVisible: "Inativo"
+- assertVisible: "Ativar"
+
+# Reativa a recompensa
+- tapOn: "Ativar"
+
+- extendedWaitUntil:
+    visible: "Desativar"
+    timeout: 8000
+
+- assertVisible: "Ativo"
+- assertVisible: "Desativar"
+
+# ------------------------------------------------------------------------------
+# PARTE 8: RETORNO AO PAINEL E HIGIENIZAÇÃO (LOGOUT)
+# ------------------------------------------------------------------------------
+- tapOn:
+    label: "Voltar para o painel"
+
+- extendedWaitUntil:
+    visible: "Painel do Estabelecimento"
+    timeout: 10000
+
+- assertVisible: "Painel do Estabelecimento"
+
+# Navega para a aba Perfil Loja para deslogar
+- tapOn: "Perfil Loja"
+
+- extendedWaitUntil:
+    visible: "Encerrar Sessão"
+    timeout: 10000
+
+- tapOn: "Encerrar Sessão"
+
+- extendedWaitUntil:
+    visible: "Sair"
+    timeout: 5000
+
+- tapOn: "Sair"
+
+- extendedWaitUntil:
+    visible: "Bem-vindo ao CashMe"
+    timeout: 15000
+
+- assertVisible: "Bem-vindo ao CashMe"
