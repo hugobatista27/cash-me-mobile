@@ -194,39 +194,64 @@ export default function ConsumerWalletScreen() {
             />
           }
           ListHeaderComponent={
-            list.length > 0 ? (
-              <View className="bg-consumidor p-5 rounded-3xl shadow-lg shadow-consumidor/20 mb-5">
-                <View className="flex-row items-center justify-between mb-3">
-                  <View>
-                    <Text className="text-white/80 text-xs font-bold uppercase tracking-wider">
-                      Total Agregado ({list.length} {list.length === 1 ? 'loja' : 'lojas'})
+            <View className="mb-4 gap-3.5">
+              {/* Atalho Meus Cupons (TASK-11) */}
+              <TouchableOpacity
+                onPress={() => router.push('/(consumer)/coupons')}
+                activeOpacity={0.8}
+                testID="wallet-coupons-shortcut"
+                className="bg-white p-4 rounded-3xl border border-neutros-borda shadow-sm flex-row items-center justify-between"
+              >
+                <View className="flex-row items-center gap-3.5 flex-1 pr-2">
+                  <View className="w-11 h-11 rounded-2xl bg-consumidor/10 items-center justify-center">
+                    <Ionicons name="ticket" size={22} color="#008D4C" />
+                  </View>
+                  <View className="flex-1">
+                    <Text className="text-sm font-extrabold text-neutros-texto">
+                      Meus Cupons
                     </Text>
-                    <View className="flex-row items-baseline gap-1.5 mt-1">
-                      <Text className="text-white text-3xl font-black">
-                        {totalCurrent}
+                    <Text className="text-xs text-neutros-cinza mt-0.5">
+                      Acesse códigos e QR Codes para uso no caixa
+                    </Text>
+                  </View>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color="#008D4C" />
+              </TouchableOpacity>
+
+              {list.length > 0 && (
+                <View className="bg-consumidor p-5 rounded-3xl shadow-lg shadow-consumidor/20">
+                  <View className="flex-row items-center justify-between mb-3">
+                    <View>
+                      <Text className="text-white/80 text-xs font-bold uppercase tracking-wider">
+                        Total Agregado ({list.length} {list.length === 1 ? 'loja' : 'lojas'})
                       </Text>
-                      <Text className="text-pontos text-base font-bold">pts ativos</Text>
+                      <View className="flex-row items-baseline gap-1.5 mt-1">
+                        <Text className="text-white text-3xl font-black">
+                          {totalCurrent}
+                        </Text>
+                        <Text className="text-pontos text-base font-bold">pts ativos</Text>
+                      </View>
+                    </View>
+
+                    <View className="bg-white/15 px-3.5 py-2 rounded-2xl border border-white/20 items-end">
+                      <Text className="text-white/80 text-[10px] font-bold uppercase">
+                        Acumulado Vida
+                      </Text>
+                      <Text className="text-white text-sm font-extrabold">
+                        {totalLifetime} pts
+                      </Text>
                     </View>
                   </View>
 
-                  <View className="bg-white/15 px-3.5 py-2 rounded-2xl border border-white/20 items-end">
-                    <Text className="text-white/80 text-[10px] font-bold uppercase">
-                      Acumulado Vida
-                    </Text>
-                    <Text className="text-white text-sm font-extrabold">
-                      {totalLifetime} pts
+                  <View className="flex-row items-center gap-2 pt-3 border-t border-white/20">
+                    <Ionicons name="lock-closed" size={14} color="#FFFFFF" />
+                    <Text className="text-white/90 text-[11px] font-medium flex-1">
+                      Toque em um estabelecimento abaixo para ver o extrato exclusivo da loja.
                     </Text>
                   </View>
                 </View>
-
-                <View className="flex-row items-center gap-2 pt-3 border-t border-white/20">
-                  <Ionicons name="lock-closed" size={14} color="#FFFFFF" />
-                  <Text className="text-white/90 text-[11px] font-medium flex-1">
-                    Toque em um estabelecimento abaixo para ver o extrato exclusivo da loja.
-                  </Text>
-                </View>
-              </View>
-            ) : null
+              )}
+            </View>
           }
           ListEmptyComponent={
             <View className="py-16 items-center justify-center px-6 bg-white rounded-3xl border border-neutros-borda mt-2">

@@ -119,4 +119,19 @@ describe('ConsumerWalletScreen (TASK-04)', () => {
     fireEvent.press(getByText('Escanear Primeira Nota'));
     expect(mockPush).toHaveBeenCalledWith('/(consumer)/(tabs)/scan');
   });
+
+  it('deve navegar para a tela de cupons ao tocar no atalho Meus Cupons (TASK-11)', async () => {
+    (useWalletModule.useCustomerBalances as jest.Mock).mockReturnValue({
+      data: mockBalances,
+      isLoading: false,
+      isError: false,
+      refetch: jest.fn(),
+      isRefetching: false,
+    });
+
+    const { getByTestId } = await render(<ConsumerWalletScreen />);
+
+    fireEvent.press(getByTestId('wallet-coupons-shortcut'));
+    expect(mockPush).toHaveBeenCalledWith('/(consumer)/coupons');
+  });
 });

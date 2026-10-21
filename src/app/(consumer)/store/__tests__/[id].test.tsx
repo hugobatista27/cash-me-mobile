@@ -1,11 +1,14 @@
 import { fireEvent, render } from '@testing-library/react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React from 'react';
-import { Linking } from 'react-native';
+import { Alert, Linking } from 'react-native';
 
 import ConsumerStoreDetailScreen from '../[id]';
+import * as useCouponsModule from '@/hooks/useCoupons';
 import * as useEstablishmentsModule from '@/hooks/useEstablishments';
+import * as useWalletModule from '@/hooks/useWallet';
 import { Establishment } from '@/services/establishments';
+import { Reward } from '@/services/rewards.service';
 
 jest.mock('expo-router', () => ({
   useRouter: jest.fn(),
@@ -13,6 +16,8 @@ jest.mock('expo-router', () => ({
 }));
 
 jest.mock('@/hooks/useEstablishments');
+jest.mock('@/hooks/useCoupons');
+jest.mock('@/hooks/useWallet');
 
 describe('ConsumerStoreDetailScreen', () => {
   const mockPush = jest.fn();
@@ -28,6 +33,21 @@ describe('ConsumerStoreDetailScreen', () => {
       id: '1',
     });
     jest.spyOn(Linking, 'openURL').mockResolvedValue(true as never);
+    jest.spyOn(Alert, 'alert');
+
+    (useCouponsModule.useCustomerEstablishmentRewards as jest.Mock).mockReturnValue({
+      data: [],
+      isLoading: false,
+      refetch: jest.fn(),
+    });
+    (useCouponsModule.useRedeemRewardMutation as jest.Mock).mockReturnValue({
+      mutateAsync: jest.fn(),
+      isPending: false,
+    });
+    (useWalletModule.useCustomerBalances as jest.Mock).mockReturnValue({
+      data: [],
+      isLoading: false,
+    });
   });
 
   const mockStore: Establishment = {
@@ -125,5 +145,86 @@ describe('ConsumerStoreDetailScreen', () => {
 
     fireEvent.press(getByText('Escanear Nota Desta Loja'));
     expect(mockPush).toHaveBeenCalledWith('/(consumer)/(tabs)/scan');
+  });
+
+  it('deve renderizar recompensas disponíveis e saldo do cliente na loja', async () => {
+    const mockReward: Reward = {
+      id: 1,
+      establishmentId: 1,
+      title: 'Cupom R$ 10 OFF',
+      description: 'Em compras acima de R$ 30',
+      discountType: 'FIXED_AMOUNT',
+      discountValue: 10,
+      pointsCost: 100,
+      stock: 15,
+      validityDays: 10,
+      status: 'ACTIVE',
+    };
+
+    (useEstablishmentsModule.useEstablishmentDetails as jest.Mock).mockReturnValue({
+      data: mockStore,
+      isLoading: false,
+      isError: false,
+      refetch: jest.fn(),
+    });
+    (useCouponsModule.useCustomerEstablishmentRewards as jest.Mock).mockReturnValue({
+      data: [mockReward],
+      isLoading: false,
+      refetch: jest.fn(),
+    });
+    (useWalletModule.useCustomerBalances as jest.Mock).mockReturnValue({
+      data: [
+        {
+          id: 10,
+          currentBalance: 250,
+          totalAccumulated: 300,
+          establishment: { id: 1, tradeName: 'Padaria Real', status: 'ACTIVE' },
+        },
+      ],
+      isLoading: false,
+    });
+
+    const { getByText, getByTestId } = await render(<ConsumerStoreDetailScreen />);
+
+    expect(getByText('Recompensas & Cupons')).toBeTruthy();
+    expect(getByText('Cupom R$ 10 OFF')).toBeTruthy();
+    expect(getByText('250 pts')).toBeTruthy();
+    expect(getByTestId('redeem-button-1')).toBeTruthy();
+  });
+
+  it('deve exibir banner de bloqueio e desabilitar resgate se a loja estiver INACTIVE (RN11)', async () => {
+    const inactiveStore: Establishment = {
+      ...mockStore,
+      status: 'INACTIVE',
+    };
+
+    const mockReward: Reward = {
+      id: 2,
+      establishmentId: 1,
+      title: 'Desconto 15%',
+      discountType: 'PERCENTAGE',
+      discountValue: 15,
+      pointsCost: 50,
+      validityDays: 5,
+      status: 'ACTIVE',
+    };
+
+    (useEstablishmentsModule.useEstablishmentDetails as jest.Mock).mockReturnValue({
+      data: inactiveStore,
+      isLoading: false,
+      isError: false,
+      refetch: jest.fn(),
+    });
+    (useCouponsModule.useCustomerEstablishmentRewards as jest.Mock).mockReturnValue({
+      data: [mockReward],
+      isLoading: false,
+      refetch: jest.fn(),
+    });
+
+    const { getByText, getByTestId } = await render(<ConsumerStoreDetailScreen />);
+
+    expect(getByText(/Resgates Temporariamente Bloqueados \(RN11\)/i)).toBeTruthy();
+    const btn = getByTestId('redeem-button-2');
+    expect(btn.props.accessibilityState?.disabled).toBe(true);
   });
 });

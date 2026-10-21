@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import React from 'react';
+import React, { useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -12,7 +12,13 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { RewardRedeemCard } from '@/components/consumer/reward-redeem-card';
+import {
+  useCustomerEstablishmentRewards,
+  useRedeemRewardMutation,
+} from '@/hooks/useCoupons';
 import { useEstablishmentDetails } from '@/hooks/useEstablishments';
+import { useCustomerBalances } from '@/hooks/useWallet';
 import {
   formatCnpj,
   formatFullAddress,
@@ -20,6 +26,7 @@ import {
   formatRuleBadge,
   formatRuleDescription,
 } from '@/services/establishments';
+import { Reward } from '@/services/rewards.service';
 
 export default function ConsumerStoreDetailScreen() {
   const router = useRouter();
@@ -27,6 +34,80 @@ export default function ConsumerStoreDetailScreen() {
   const storeId = params.id;
 
   const { data: store, isLoading, isError, error, refetch } = useEstablishmentDetails(storeId);
+  const {
+    data: rewards = [],
+    isLoading: isLoadingRewards,
+  } = useCustomerEstablishmentRewards(storeId || '');
+
+  const { data: balances = [] } = useCustomerBalances();
+  const redeemMutation = useRedeemRewardMutation();
+  const [redeemingId, setRedeemingId] = useState<number | string | null>(null);
+
+  // Busca o saldo isolado do consumidor nesta loja específica (ADR-002)
+  const storeBalanceItem = (balances || []).find(
+    (b) =>
+      String(b.establishment?.id) === String(storeId) ||
+      String(b.establishmentId) === String(storeId)
+  );
+  const currentStoreBalance = storeBalanceItem?.currentBalance ?? 0;
+  const isStoreInactive = store?.status === 'INACTIVE' || store?.status === 'SUSPENDED';
+
+  // Ação: Resgate atômico de recompensa (ADR-003, RN11)
+  const handleRedeemReward = (reward: Reward) => {
+    if (isStoreInactive) {
+      Alert.alert(
+        'Resgates Indisponíveis',
+        'Este estabelecimento está temporariamente inativo para resgates de cupons (RN11). Seus pontos acumulados continuam salvos e protegidos.'
+      );
+      return;
+    }
+
+    if (currentStoreBalance < reward.pointsCost) {
+      Alert.alert(
+        'Saldo Insuficiente',
+        `Você possui ${currentStoreBalance} pts nesta loja, mas este cupom requer ${reward.pointsCost} pts.`
+      );
+      return;
+    }
+
+    Alert.alert(
+      'Confirmar Resgate de Cupom',
+      `Deseja resgatar "${reward.title}" por ${reward.pointsCost} pontos?\n\nOs pontos serão debitados atômica e imediatamente da sua carteira nesta loja (ADR-003).`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Confirmar Resgate',
+          style: 'default',
+          onPress: async () => {
+            setRedeemingId(reward.id);
+            try {
+              const res = await redeemMutation.mutateAsync(reward.id);
+              const couponCode = res.coupon?.code || '';
+              Alert.alert(
+                'Cupom Resgatado com Sucesso! 🎉',
+                `Seu código de desconto é ${couponCode}. Ele já está disponível na aba "Meus Cupons" da sua carteira para uso no caixa.`,
+                [
+                  { text: 'Continuar na Loja', style: 'cancel' },
+                  {
+                    text: 'Ver Meus Cupons',
+                    onPress: () => router.push('/(consumer)/coupons'),
+                  },
+                ]
+              );
+            } catch (err: unknown) {
+              const maybeAxios = err as { response?: { data?: { message?: string } } };
+              const msg =
+                maybeAxios?.response?.data?.message ||
+                'Não foi possível concluir o resgate do cupom. Tente novamente.';
+              Alert.alert('Falha no Resgate', msg);
+            } finally {
+              setRedeemingId(null);
+            }
+          },
+        },
+      ]
+    );
+  };
 
   // Ação: Abrir aplicativo de mapas com endereço
   const handleOpenMaps = async () => {
@@ -212,6 +293,76 @@ export default function ConsumerStoreDetailScreen() {
               Basta escanear o QR Code da NFC-e emitida nesta loja para pontuar!
             </Text>
           </View>
+        </View>
+
+        {/* RN11: Bloqueio de Resgates em Lojas Inativas */}
+        {isStoreInactive && (
+          <View className="bg-amber-50 p-4 rounded-3xl border border-amber-200 flex-row items-center gap-3">
+            <View className="w-10 h-10 rounded-full bg-amber-500/15 items-center justify-center">
+              <Ionicons name="alert-circle" size={22} color="#D97706" />
+            </View>
+            <View className="flex-1">
+              <Text className="text-xs font-bold text-amber-900">
+                Resgates Temporariamente Bloqueados (RN11)
+              </Text>
+              <Text className="text-[11px] text-amber-700 leading-tight mt-0.5">
+                Este estabelecimento está inativo para novos resgates de cupons. Seus pontos acumulados continuam 100% protegidos.
+              </Text>
+            </View>
+          </View>
+        )}
+
+        {/* Seção: Recompensas e Cupons Disponíveis (TASK-11) */}
+        <View className="gap-3 mt-1">
+          <View className="flex-row items-center justify-between">
+            <View>
+              <Text className="text-sm font-bold text-neutros-texto uppercase tracking-wider">
+                Recompensas & Cupons
+              </Text>
+              <Text className="text-xs text-neutros-cinza mt-0.5">
+                Seu saldo nesta loja: <Text className="font-black text-consumidor">{currentStoreBalance} pts</Text>
+              </Text>
+            </View>
+
+            <TouchableOpacity
+              onPress={() => router.push('/(consumer)/coupons')}
+              activeOpacity={0.7}
+              className="px-3 py-1.5 rounded-xl bg-consumidor/10 border border-consumidor/20 flex-row items-center gap-1"
+            >
+              <Ionicons name="ticket-outline" size={14} color="#008D4C" />
+              <Text className="text-xs font-bold text-consumidor">Meus Cupons</Text>
+            </TouchableOpacity>
+          </View>
+
+          {isLoadingRewards ? (
+            <View className="py-6 items-center justify-center bg-white rounded-3xl border border-neutros-borda">
+              <ActivityIndicator size="small" color="#008D4C" />
+              <Text className="text-xs text-neutros-cinza font-semibold mt-2">
+                Carregando cupons da loja...
+              </Text>
+            </View>
+          ) : rewards.length === 0 ? (
+            <View className="py-6 items-center justify-center bg-white rounded-3xl border border-neutros-borda px-6">
+              <Ionicons name="gift-outline" size={28} color="#A3A3A3" />
+              <Text className="text-sm font-bold text-neutros-texto mt-2 text-center">
+                Nenhum cupom ativo no momento
+              </Text>
+              <Text className="text-xs text-neutros-cinza text-center mt-1">
+                Esta loja ainda não disponibilizou cupons para troca por pontos.
+              </Text>
+            </View>
+          ) : (
+            rewards.map((reward) => (
+              <RewardRedeemCard
+                key={reward.id}
+                reward={reward}
+                onRedeem={handleRedeemReward}
+                isRedeeming={redeemingId === reward.id}
+                isStoreInactive={isStoreInactive}
+                userBalance={currentStoreBalance}
+              />
+            ))
+          )}
         </View>
 
         {/* Card de Endereço e Localização */}

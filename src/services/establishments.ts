@@ -20,7 +20,7 @@ export interface Establishment {
   cnpj: string;
   legalName: string;
   tradeName: string;
-  status: 'PENDING' | 'ACTIVE' | 'SUSPENDED';
+  status: 'PENDING' | 'ACTIVE' | 'INACTIVE' | 'SUSPENDED';
   conversionFactor: number;
   phone?: string | null;
   whatsapp?: string | null;
