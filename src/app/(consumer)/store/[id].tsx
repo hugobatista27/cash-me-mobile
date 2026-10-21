@@ -5,6 +5,7 @@ import {
   ActivityIndicator,
   Alert,
   Linking,
+  Modal,
   ScrollView,
   Text,
   TouchableOpacity,
@@ -26,7 +27,7 @@ import {
   formatRuleBadge,
   formatRuleDescription,
 } from '@/services/establishments';
-import { Reward } from '@/services/rewards.service';
+import { formatDiscountValue, Reward } from '@/services/rewards.service';
 
 export default function ConsumerStoreDetailScreen() {
   const router = useRouter();
@@ -37,11 +38,11 @@ export default function ConsumerStoreDetailScreen() {
   const {
     data: rewards = [],
     isLoading: isLoadingRewards,
-  } = useCustomerEstablishmentRewards(storeId || '');
+  } = useCustomerEstablishmentRewards(Number(storeId));
 
   const { data: balances = [] } = useCustomerBalances();
   const redeemMutation = useRedeemRewardMutation();
-  const [redeemingId, setRedeemingId] = useState<number | string | null>(null);
+  const [selectedReward, setSelectedReward] = useState<Reward | null>(null);
 
   // Busca o saldo isolado do consumidor nesta loja específica (ADR-002)
   const storeBalanceItem = (balances || []).find(
@@ -52,7 +53,7 @@ export default function ConsumerStoreDetailScreen() {
   const currentStoreBalance = storeBalanceItem?.currentBalance ?? 0;
   const isStoreInactive = store?.status === 'INACTIVE' || store?.status === 'SUSPENDED';
 
-  // Ação: Resgate atômico de recompensa (ADR-003, RN11)
+  // Ação: Abrir modal de confirmação de resgate
   const handleRedeemReward = (reward: Reward) => {
     if (isStoreInactive) {
       Alert.alert(
@@ -70,43 +71,36 @@ export default function ConsumerStoreDetailScreen() {
       return;
     }
 
-    Alert.alert(
-      'Confirmar Resgate de Cupom',
-      `Deseja resgatar "${reward.title}" por ${reward.pointsCost} pontos?\n\nOs pontos serão debitados atômica e imediatamente da sua carteira nesta loja (ADR-003).`,
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Confirmar Resgate',
-          style: 'default',
-          onPress: async () => {
-            setRedeemingId(reward.id);
-            try {
-              const res = await redeemMutation.mutateAsync(reward.id);
-              const couponCode = res.coupon?.code || '';
-              Alert.alert(
-                'Cupom Resgatado com Sucesso! 🎉',
-                `Seu código de desconto é ${couponCode}. Ele já está disponível na aba "Meus Cupons" da sua carteira para uso no caixa.`,
-                [
-                  { text: 'Continuar na Loja', style: 'cancel' },
-                  {
-                    text: 'Ver Meus Cupons',
-                    onPress: () => router.push('/(consumer)/coupons'),
-                  },
-                ]
-              );
-            } catch (err: unknown) {
-              const maybeAxios = err as { response?: { data?: { message?: string } } };
-              const msg =
-                maybeAxios?.response?.data?.message ||
-                'Não foi possível concluir o resgate do cupom. Tente novamente.';
-              Alert.alert('Falha no Resgate', msg);
-            } finally {
-              setRedeemingId(null);
-            }
+    setSelectedReward(reward);
+  };
+
+  // Ação: Confirmar resgate atômico (ADR-003)
+  const handleConfirmRedeem = async () => {
+    if (!selectedReward) return;
+    const rewardToRedeem = selectedReward;
+
+    try {
+      const res = await redeemMutation.mutateAsync(rewardToRedeem.id);
+      setSelectedReward(null);
+      const couponCode = res.coupon?.code || '';
+      Alert.alert(
+        'Cupom Resgatado com Sucesso! 🎉',
+        `Seu código de desconto é ${couponCode}. Ele já está disponível na aba "Meus Cupons" da sua carteira para uso no caixa.`,
+        [
+          { text: 'Continuar na Loja', style: 'cancel' },
+          {
+            text: 'Ver Meus Cupons',
+            onPress: () => router.push('/(consumer)/coupons'),
           },
-        },
-      ]
-    );
+        ]
+      );
+    } catch (err: unknown) {
+      const maybeAxios = err as { response?: { data?: { message?: string } } };
+      const msg =
+        maybeAxios?.response?.data?.message ||
+        'Não foi possível concluir o resgate do cupom. Tente novamente.';
+      Alert.alert('Falha no Resgate', msg);
+    }
   };
 
   // Ação: Abrir aplicativo de mapas com endereço
@@ -357,7 +351,7 @@ export default function ConsumerStoreDetailScreen() {
                 key={reward.id}
                 reward={reward}
                 onRedeem={handleRedeemReward}
-                isRedeeming={redeemingId === reward.id}
+                isRedeeming={redeemMutation.isPending && selectedReward?.id === reward.id}
                 isStoreInactive={isStoreInactive}
                 userBalance={currentStoreBalance}
               />
@@ -488,6 +482,116 @@ export default function ConsumerStoreDetailScreen() {
           </Text>
         </TouchableOpacity>
       </ScrollView>
+
+      {/* Modal de Confirmação de Resgate (ADR-003, RN11) */}
+      <Modal
+        visible={Boolean(selectedReward)}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          if (!redeemMutation.isPending) {
+            setSelectedReward(null);
+          }
+        }}
+      >
+        <View className="flex-1 bg-black/50 items-center justify-center p-6">
+          <View className="w-full max-w-sm bg-white rounded-3xl p-6 shadow-xl border border-neutros-borda">
+            {/* Cabeçalho do Modal */}
+            <View className="items-center mb-4">
+              <View className="w-14 h-14 rounded-2xl bg-consumidor/10 items-center justify-center mb-2">
+                <Ionicons name="ticket" size={28} color="#008D4C" />
+              </View>
+              <Text className="text-lg font-extrabold text-neutros-texto text-center">
+                Confirmar Resgate
+              </Text>
+              <Text className="text-xs text-neutros-cinza text-center mt-0.5">
+                {store?.tradeName}
+              </Text>
+            </View>
+
+            {/* Resumo da Recompensa */}
+            {selectedReward && (
+              <View className="bg-neutros-fundo p-4 rounded-2xl border border-neutros-borda mb-4">
+                <View className="flex-row items-center justify-between mb-1">
+                  <Text className="text-xs font-bold text-neutros-cinza uppercase">
+                    Benefício
+                  </Text>
+                  <Text className="text-xs font-black text-consumidor">
+                    {formatDiscountValue(selectedReward)}
+                  </Text>
+                </View>
+                <Text className="text-sm font-extrabold text-neutros-texto">
+                  {selectedReward.title}
+                </Text>
+
+                {/* Tabela de Cálculo de Pontos */}
+                <View className="mt-3 pt-3 border-t border-neutros-borda/70 gap-2">
+                  <View className="flex-row items-center justify-between">
+                    <Text className="text-xs text-neutros-cinza">Saldo Atual:</Text>
+                    <Text className="text-xs font-bold text-neutros-texto">
+                      {currentStoreBalance} pts
+                    </Text>
+                  </View>
+                  <View className="flex-row items-center justify-between">
+                    <Text className="text-xs text-red-600 font-semibold">
+                      Pontos Debitados:
+                    </Text>
+                    <Text className="text-xs font-black text-red-600">
+                      -{selectedReward.pointsCost} pts
+                    </Text>
+                  </View>
+                  <View className="flex-row items-center justify-between pt-1 border-t border-dashed border-neutros-borda">
+                    <Text className="text-xs font-extrabold text-neutros-texto">
+                      Novo Saldo:
+                    </Text>
+                    <Text className="text-sm font-black text-consumidor">
+                      {currentStoreBalance - selectedReward.pointsCost} pts
+                    </Text>
+                  </View>
+                </View>
+              </View>
+            )}
+
+            <Text className="text-[11px] text-neutros-cinza text-center leading-tight mb-5">
+              O débito de pontos ocorre de forma atômica e imediata exclusivamente nesta loja (ADR-003).
+            </Text>
+
+            {/* Ações */}
+            <View className="flex-row items-center gap-3">
+              <TouchableOpacity
+                onPress={() => setSelectedReward(null)}
+                disabled={redeemMutation.isPending}
+                activeOpacity={0.8}
+                testID="modal-cancel-redeem-btn"
+                className="flex-1 py-3.5 rounded-xl bg-neutros-fundo border border-neutros-borda items-center justify-center"
+              >
+                <Text className="text-xs font-bold text-neutros-cinza">
+                  Cancelar
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={handleConfirmRedeem}
+                disabled={redeemMutation.isPending}
+                activeOpacity={0.8}
+                testID="modal-confirm-redeem-btn"
+                className="flex-1 py-3.5 rounded-xl bg-consumidor items-center justify-center flex-row gap-1.5 shadow-sm"
+              >
+                {redeemMutation.isPending ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <>
+                    <Ionicons name="checkmark-circle" size={16} color="#FFFFFF" />
+                    <Text className="text-xs font-extrabold text-white">
+                      Confirmar
+                    </Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
