@@ -1,0 +1,291 @@
+appId: host.exp.exponent
+---
+# ==============================================================================
+# Suíte de Testes E2E Maestro - TASK-11: Resgate de Cupons e Débito Atômico (ADR-003)
+#
+# Escopo de Validação:
+# 1. Login do Consumidor (Maria Silva - saldo ativo no Supermercado Progresso)
+# 2. Navegação para a vitrine de Lojas e acesso aos detalhes de 'Supermercado Progresso'
+# 3. Visualização da seção 'Recompensas & Cupons' e saldo isolado (ADR-002)
+# 4. Toque no botão 'Resgatar por 50 pts' abrindo o modal de confirmação
+# 5. Validação dos cálculos no modal (Saldo Atual, Pontos Debitados, Novo Saldo)
+# 6. Confirmação do resgate atômico e toque em 'Ver Meus Cupons' no Alert de sucesso
+# 7. Validação da tela 'Meus Cupons' (aba Ativos, card do cupom recém-gerado com status 'Ativo')
+# 8. Toque no cupom para abrir a tela 'Detalhes do Cupom'
+# 9. Validação do código alfanumérico, QR Code e regras de utilização
+# 10. Toque em 'Cancelar Cupom e Estornar Pontos' com confirmação no Alert (ADR-003)
+# 11. Validação de estorno: redirecionamento para lista de cupons, transição para 'Cancelado'
+# 12. Retorno para a Carteira (/wallet) pelo atalho de cupons e logout para higienização
+# ==============================================================================
+
+# Abre a aplicação Expo Go no Metro Bundler
+- openLink: "exp://10.0.2.2:8081"
+
+# Aguarda a interface carregar com timeout resiliente
+- extendedWaitUntil:
+    visible: ".*(CashMe|Consumidor|Estabelecimento|Detalhes|Cupons).*"
+    timeout: 15000
+
+# Se estiver na tela de Detalhes do Cupom de execução anterior, volta
+- runFlow:
+    when:
+      visible: "Detalhes do Cupom"
+    commands:
+      - tapOn:
+          label: "Voltar"
+
+# Se estiver na tela de Meus Cupons de execução anterior, volta
+- runFlow:
+    when:
+      visible: "Meus Cupons"
+    commands:
+      - tapOn:
+          label: "Voltar"
+
+# Se estiver na tela de detalhes da loja de execução anterior, volta
+- runFlow:
+    when:
+      visible: "Voltar"
+    commands:
+      - tapOn:
+          label: "Voltar"
+
+# Se estiver na tela do lojista por engano, encerra a sessão
+- runFlow:
+    when:
+      visible: "Painel do Estabelecimento"
+    commands:
+      - tapOn: "Perfil Loja"
+      - extendedWaitUntil:
+          visible: "Encerrar Sessão"
+          timeout: 5000
+      - tapOn: "Encerrar Sessão"
+      - extendedWaitUntil:
+          visible: "Sair"
+          timeout: 5000
+      - tapOn: "Sair"
+
+# ------------------------------------------------------------------------------
+# PARTE 1: LOGIN DO CONSUMIDOR (CASO ESTEJA NA TELA DE LOGIN)
+# ------------------------------------------------------------------------------
+- runFlow:
+    when:
+      visible: "Bem-vindo ao CashMe"
+    commands:
+      - tapOn: "seu.email@exemplo.com"
+      - eraseText: 50
+      - inputText: "maria.silva@email.com"
+      - hideKeyboard
+
+      - tapOn: "Sua senha secreta"
+      - eraseText: 50
+      - inputText: "password123"
+      - hideKeyboard
+
+      - tapOn: "Entrar"
+
+      - extendedWaitUntil:
+          visible: "Área do Consumidor"
+          timeout: 15000
+
+# Se estiver em outra aba ou na Home, garante a navegação para Lojas
+- tapOn: "Lojas"
+
+# ------------------------------------------------------------------------------
+# PARTE 2: NAVEGAÇÃO PARA A VITRINE DA LOJA PARCEIRA
+# ------------------------------------------------------------------------------
+- extendedWaitUntil:
+    visible: "Lojas Credenciadas"
+    timeout: 10000
+
+- assertVisible: "Lojas Credenciadas"
+
+# Garante visibilidade e acessa a loja 'Supermercado Progresso'
+- scrollUntilVisible:
+    element:
+      text: "Supermercado Progresso"
+    direction: DOWN
+    timeout: 8000
+
+- tapOn: "Supermercado Progresso"
+
+# Aguarda a tela de detalhes da loja (/store/[id])
+- extendedWaitUntil:
+    visible: "Supermercado Progresso"
+    timeout: 10000
+
+- assertVisible: "Supermercado Progresso"
+- assertVisible: "Parceiro Oficial Credenciado"
+
+# ------------------------------------------------------------------------------
+# PARTE 3: VISUALIZAÇÃO DE RECOMPENSAS E RESGATE COM MODAL DE CONFIRMAÇÃO
+# ------------------------------------------------------------------------------
+# Rola até a seção de Recompensas e Cupons da Loja
+- scrollUntilVisible:
+    element:
+      text: "Recompensas & Cupons"
+    direction: DOWN
+    timeout: 8000
+
+- assertVisible: "Recompensas & Cupons"
+- assertVisible: "Vale Compras R$ 10"
+- assertVisible: "50 pts"
+- assertVisible: "R$ 10,00"
+
+# Toca no botão de resgate da recompensa
+- tapOn:
+    id: "redeem-button-1"
+
+# Valida o Modal de Confirmação de Resgate (ADR-003)
+- extendedWaitUntil:
+    visible: "Confirmar Resgate"
+    timeout: 5000
+
+- assertVisible: "Confirmar Resgate"
+- assertVisible: "Vale Compras R$ 10"
+- assertVisible: "Pontos Debitados:"
+- assertVisible: "-50 pts"
+- assertVisible: "Novo Saldo:"
+
+# Confirma o resgate dentro do Modal
+- tapOn:
+    id: "modal-confirm-redeem-btn"
+
+# Aguarda o Alert nativo de sucesso
+- extendedWaitUntil:
+    visible: "Cupom Resgatado com Sucesso! 🎉"
+    timeout: 10000
+
+- assertVisible: "Cupom Resgatado com Sucesso! 🎉"
+
+# Toca em 'Ver Meus Cupons' no diálogo de sucesso
+- tapOn: "Ver Meus Cupons"
+
+# ------------------------------------------------------------------------------
+# PARTE 4: TELA 'MEUS CUPONS' E DETALHES DO CUPOM (CÓDIGO E QR CODE)
+# ------------------------------------------------------------------------------
+- extendedWaitUntil:
+    visible: "Meus Cupons"
+    timeout: 10000
+
+- assertVisible: "Meus Cupons"
+- assertVisible: "Ativos"
+- assertVisible: "Supermercado Progresso"
+- assertVisible: "R$ 10,00"
+- assertVisible: "50 pts pagos"
+
+# Toca no card do cupom para ver os detalhes completos
+- tapOn: "R$ 10,00"
+
+- extendedWaitUntil:
+    visible: "Detalhes do Cupom"
+    timeout: 10000
+
+- assertVisible: "Detalhes do Cupom"
+- assertVisible: "Supermercado Progresso"
+- assertVisible: "Cupom Ativo para Uso"
+- assertVisible: "Válido para leitura ótica no caixa"
+- assertVisible: "Código de Desconto"
+- assertVisible:
+    id: "coupon-code-display"
+- assertVisible:
+    id: "copy-coupon-code-button"
+
+# Testa o botão de copiar código
+- tapOn:
+    id: "copy-coupon-code-button"
+
+# ------------------------------------------------------------------------------
+# PARTE 5: CANCELAMENTO VOLUNTÁRIO COM ESTORNO DOS PONTOS (ADR-003)
+# ------------------------------------------------------------------------------
+- scrollUntilVisible:
+    element:
+      id: "cancel-coupon-button"
+    direction: DOWN
+    timeout: 8000
+
+- assertVisible:
+    id: "cancel-coupon-button"
+
+- tapOn:
+    id: "cancel-coupon-button"
+
+# Valida o diálogo de confirmação do cancelamento e estorno
+- extendedWaitUntil:
+    visible: "Cancelar Cupom e Estornar Pontos"
+    timeout: 5000
+
+- assertVisible: "Cancelar Cupom e Estornar Pontos"
+
+# Confirma o cancelamento e estorno
+- tapOn: "Sim, Cancelar e Estornar"
+
+# Aguarda a mensagem de sucesso do estorno
+- extendedWaitUntil:
+    visible: "Cupom Cancelado! 🔄"
+    timeout: 10000
+
+- assertVisible: "Cupom Cancelado! 🔄"
+- tapOn: "OK"
+
+# Valida retorno à tela 'Meus Cupons'
+- extendedWaitUntil:
+    visible: "Meus Cupons"
+    timeout: 10000
+
+- assertVisible: "Meus Cupons"
+
+# Alterna para a aba 'Cancelados / Expirados' para verificar o cupom cancelado
+- tapOn: "Cancelados / Expirados"
+
+- extendedWaitUntil:
+    visible: "Cancelado"
+    timeout: 5000
+
+- assertVisible: "Cancelado"
+- assertVisible: "Supermercado Progresso"
+
+# ------------------------------------------------------------------------------
+# PARTE 6: RETORNO À CARTEIRA E LOGOUT (HIGIENIZAÇÃO)
+# ------------------------------------------------------------------------------
+# Alterna de volta para a aba 'Ativos' para exibir o estado vazio e o botão de explorar
+- tapOn: "Ativos"
+
+# Toca em 'Explorar Lojas Parceiras' para retornar às abas principais
+- tapOn: "Explorar Lojas Parceiras"
+
+- extendedWaitUntil:
+    visible: "Lojas Credenciadas"
+    timeout: 10000
+
+# Navega até a aba Carteira para validar o atalho 'Meus Cupons'
+- tapOn: "Carteira"
+
+- extendedWaitUntil:
+    visible: "Carteira Digital"
+    timeout: 10000
+
+- assertVisible: "Carteira Digital"
+- assertVisible:
+    id: "wallet-coupons-shortcut"
+
+# Navega até a aba Perfil e realiza o Logout
+- tapOn: "Perfil"
+
+- extendedWaitUntil:
+    visible: "Encerrar Sessão"
+    timeout: 10000
+
+- tapOn: "Encerrar Sessão"
+
+- extendedWaitUntil:
+    visible: "Sair"
+    timeout: 5000
+
+- tapOn: "Sair"
+
+- extendedWaitUntil:
+    visible: "Bem-vindo ao CashMe"
+    timeout: 15000
+
+- assertVisible: "Bem-vindo ao CashMe"
