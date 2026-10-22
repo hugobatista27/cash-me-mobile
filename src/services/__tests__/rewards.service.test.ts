@@ -198,6 +198,23 @@ describe('RewardsService (TASK-10)', () => {
       });
       expect(formatted).toBe('15% OFF');
     });
+
+    it('deve lidar com campos em snake_case e valores em string sem gerar NaN', () => {
+      const formattedFixed = formatDiscountValue({
+        discount_type: 'FIXED_AMOUNT',
+        discount_value: '10.00',
+      });
+      expect(formattedFixed).toBe('R$ 10,00');
+
+      const formattedPerc = formatDiscountValue({
+        discount_type: 'PERCENTAGE',
+        discount_value: '20',
+      });
+      expect(formattedPerc).toBe('20% OFF');
+
+      const formattedFallback = formatDiscountValue({});
+      expect(formattedFallback).toBe('R$ 0,00');
+    });
   });
 
   describe('isRewardAvailable', () => {

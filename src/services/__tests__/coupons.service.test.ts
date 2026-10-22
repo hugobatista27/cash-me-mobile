@@ -9,6 +9,7 @@ import {
   getCustomerEstablishmentRewards,
   isCouponActive,
   isCouponExpired,
+  normalizeCoupon,
   redeemReward,
   RedeemRewardResponse,
 } from '@/services/coupons.service';
@@ -203,6 +204,35 @@ describe('CouponsService (TASK-11)', () => {
       expect(result).toEqual([mockCoupon]);
     });
 
+    it('deve normalizar campos snake_case e string (discount_value e discount_type) para camelCase numérico', async () => {
+      const rawApiCoupon = {
+        id: 102,
+        customer_id: 5,
+        establishment_id: 10,
+        reward_id: 1,
+        code: 'DISC10',
+        points_cost: '100',
+        discount_type: 'FIXED_AMOUNT',
+        discount_value: '10.00',
+        min_purchase_amount: '50.00',
+        max_discount_amount: null,
+        status: 'ACTIVE',
+        expires_at: '2026-10-28T20:00:00Z',
+      };
+
+      (apiClient.get as jest.Mock).mockResolvedValueOnce({
+        data: { data: [rawApiCoupon] },
+      });
+
+      const result = await couponsService.getCustomerCoupons();
+
+      expect(result).toHaveLength(1);
+      expect(result[0].discountValue).toBe(10);
+      expect(result[0].discountType).toBe('FIXED_AMOUNT');
+      expect(result[0].pointsCost).toBe(100);
+      expect(result[0].minPurchaseAmount).toBe(50);
+    });
+
     it('deve retornar lista vazia se resposta for nula', async () => {
       (apiClient.get as jest.Mock).mockResolvedValueOnce({
         data: null,
@@ -306,6 +336,46 @@ describe('CouponsService (TASK-11)', () => {
             expiresAt: futureDate,
           })
         ).toBe(false);
+      });
+    });
+
+    describe('normalizeCoupon', () => {
+      it('deve extrair e converter discountValue e discountType de snake_case e strings', () => {
+        const raw = {
+          id: 99,
+          discount_type: 'PERCENTAGE',
+          discount_value: '25.50',
+          points_cost: '200',
+        };
+
+        const normalized = normalizeCoupon(raw);
+
+        expect(normalized.discountType).toBe('PERCENTAGE');
+        expect(normalized.discountValue).toBe(25.5);
+        expect(normalized.pointsCost).toBe(200);
+      });
+
+      it('deve fazer fallback para reward aninhado se campos diretos estiverem ausentes', () => {
+        const raw = {
+          id: 100,
+          reward: {
+            discount_type: 'FIXED_AMOUNT',
+            discount_value: '10',
+          },
+        };
+
+        const normalized = normalizeCoupon(raw);
+
+        expect(normalized.discountType).toBe('FIXED_AMOUNT');
+        expect(normalized.discountValue).toBe(10);
+      });
+
+      it('deve retornar 0 para discountValue se nenhum campo estiver presente', () => {
+        const raw = { id: 101 };
+        const normalized = normalizeCoupon(raw);
+
+        expect(normalized.discountValue).toBe(0);
+        expect(normalized.discountType).toBe('FIXED_AMOUNT');
       });
     });
   });

@@ -129,9 +129,22 @@ export default function ConsumerCouponDetailScreen() {
     );
   }
 
+  const rawDiscountType =
+    coupon.discountType ??
+    (coupon as any).discount_type ??
+    coupon.reward?.discountType ??
+    (coupon.reward as any)?.discount_type;
+
+  const rawDiscountValue =
+    coupon.discountValue ??
+    (coupon as any).discount_value ??
+    coupon.reward?.discountValue ??
+    (coupon.reward as any)?.discount_value ??
+    0;
+
   const discountFormatted = formatDiscountValue({
-    discountType: coupon.discountType,
-    discountValue: coupon.discountValue,
+    discountType: rawDiscountType,
+    discountValue: Number(rawDiscountValue),
   });
 
   const formattedExpiry = (() => {

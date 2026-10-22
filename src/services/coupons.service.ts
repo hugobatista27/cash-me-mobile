@@ -82,6 +82,64 @@ export function isCouponExpired(
 }
 
 /**
+ * Normaliza os campos de um cupom vindos da API para camelCase e valores numéricos (TASK-11)
+ */
+export function normalizeCoupon(item: any): CouponRedemption {
+  if (!item || typeof item !== 'object') return item;
+
+  const rawDiscountType =
+    item.discountType ??
+    item.discount_type ??
+    item.reward?.discountType ??
+    item.reward?.discount_type ??
+    'FIXED_AMOUNT';
+
+  const rawDiscountValue =
+    item.discountValue ??
+    item.discount_value ??
+    item.reward?.discountValue ??
+    item.reward?.discount_value ??
+    0;
+
+  const rawPointsCost =
+    item.pointsCost ??
+    item.points_cost ??
+    item.reward?.pointsCost ??
+    item.reward?.points_cost ??
+    0;
+
+  const rawMinPurchase =
+    item.minPurchaseAmount ??
+    item.min_purchase_amount ??
+    item.reward?.minPurchaseAmount ??
+    item.reward?.min_purchase_amount;
+
+  const rawMaxDiscount =
+    item.maxDiscountAmount ??
+    item.max_discount_amount ??
+    item.reward?.maxDiscountAmount ??
+    item.reward?.max_discount_amount;
+
+  const numDiscountValue = Number(rawDiscountValue);
+  const numPointsCost = Number(rawPointsCost);
+
+  return {
+    ...item,
+    discountType: rawDiscountType as RewardDiscountType,
+    discountValue: isNaN(numDiscountValue) ? 0 : numDiscountValue,
+    pointsCost: isNaN(numPointsCost) ? 0 : numPointsCost,
+    minPurchaseAmount:
+      rawMinPurchase !== undefined && rawMinPurchase !== null
+        ? Number(rawMinPurchase)
+        : undefined,
+    maxDiscountAmount:
+      rawMaxDiscount !== undefined && rawMaxDiscount !== null
+        ? Number(rawMaxDiscount)
+        : null,
+  };
+}
+
+/**
  * Serviços da API para consulta, resgate e cancelamento de cupons (TASK-11)
  */
 export const couponsService = {
@@ -96,13 +154,33 @@ export const couponsService = {
     );
 
     const body = response?.data;
-    if (Array.isArray(body)) {
-      return body;
-    }
-    if (body && typeof body === 'object' && 'data' in body && Array.isArray(body.data)) {
-      return body.data;
-    }
-    return [];
+    const items = Array.isArray(body)
+      ? body
+      : body && typeof body === 'object' && 'data' in body && Array.isArray(body.data)
+        ? body.data
+        : [];
+
+    return items.map((item: any) => {
+      const discountValue = Number(item.discountValue ?? item.discount_value ?? 0);
+      const pointsCost = Number(item.pointsCost ?? item.points_cost ?? 0);
+      const rawMinPurchase = item.minPurchaseAmount ?? item.min_purchase_amount;
+      const rawMaxDiscount = item.maxDiscountAmount ?? item.max_discount_amount;
+
+      return {
+        ...item,
+        discountType: item.discountType ?? item.discount_type ?? 'FIXED_AMOUNT',
+        discountValue: isNaN(discountValue) ? 0 : discountValue,
+        pointsCost: isNaN(pointsCost) ? 0 : pointsCost,
+        minPurchaseAmount:
+          rawMinPurchase !== undefined && rawMinPurchase !== null
+            ? Number(rawMinPurchase)
+            : undefined,
+        maxDiscountAmount:
+          rawMaxDiscount !== undefined && rawMaxDiscount !== null
+            ? Number(rawMaxDiscount)
+            : null,
+      };
+    });
   },
 
   /**
@@ -122,11 +200,14 @@ export const couponsService = {
         : body;
 
     if (raw && typeof raw === 'object' && 'coupon' in raw) {
-      return raw as RedeemRewardResponse;
+      return {
+        ...(raw as RedeemRewardResponse),
+        coupon: normalizeCoupon((raw as any).coupon),
+      };
     }
 
     return {
-      coupon: raw as CouponRedemption,
+      coupon: normalizeCoupon(raw),
     };
   },
 
@@ -147,12 +228,21 @@ export const couponsService = {
         : body;
 
     if (raw && typeof raw === 'object' && 'coupon' in raw) {
-      return raw as CancelCouponResponse;
+      return {
+        ...(raw as CancelCouponResponse),
+        coupon: normalizeCoupon((raw as any).coupon),
+      };
     }
 
     return {
-      coupon: raw as CouponRedemption,
-      refundedPoints: (raw as CouponRedemption)?.pointsCost,
+      coupon: normalizeCoupon(raw),
+      refundedPoints: Number(
+        (raw as any)?.refundedPoints ??
+        (raw as any)?.refunded_points ??
+        (raw as any)?.pointsCost ??
+        (raw as any)?.points_cost ??
+        0
+      ),
     };
   },
 
@@ -169,13 +259,13 @@ export const couponsService = {
     });
 
     const body = response?.data;
-    if (Array.isArray(body)) {
-      return body;
-    }
-    if (body && typeof body === 'object' && 'data' in body && Array.isArray(body.data)) {
-      return body.data;
-    }
-    return [];
+    const items = Array.isArray(body)
+      ? body
+      : body && typeof body === 'object' && 'data' in body && Array.isArray(body.data)
+        ? body.data
+        : [];
+
+    return items.map((item: any) => normalizeCoupon(item));
   },
 };
 

@@ -39,13 +39,19 @@ export type UpdateRewardDTO = Partial<CreateRewardDTO>;
  * Formata o valor de desconto para exibição amigável (R$ 10,00 ou 15% OFF)
  */
 export function formatDiscountValue(reward: {
-  discountType: RewardDiscountType;
-  discountValue: number;
+  discountType?: RewardDiscountType | string;
+  discount_type?: RewardDiscountType | string;
+  discountValue?: number | string;
+  discount_value?: number | string;
 }): string {
-  if (reward.discountType === 'PERCENTAGE') {
-    return `${reward.discountValue}% OFF`;
+  const type = reward?.discountType ?? reward?.discount_type ?? 'FIXED_AMOUNT';
+  const rawNum = Number(reward?.discountValue ?? reward?.discount_value ?? 0);
+  const safeValue = isNaN(rawNum) ? 0 : rawNum;
+
+  if (type === 'PERCENTAGE') {
+    return `${safeValue}% OFF`;
   }
-  return formatCurrency(reward.discountValue).replace(/\u00A0/g, ' ');
+  return formatCurrency(safeValue).replace(/\u00A0/g, ' ');
 }
 
 /**

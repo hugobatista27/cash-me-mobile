@@ -1,4 +1,4 @@
-import { fireEvent, render } from '@testing-library/react-native';
+import { act, fireEvent, render } from '@testing-library/react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React from 'react';
 import { Alert, Linking } from 'react-native';
@@ -226,5 +226,69 @@ describe('ConsumerStoreDetailScreen', () => {
     expect(getByText(/Resgates Temporariamente Bloqueados \(RN11\)/i)).toBeTruthy();
     const btn = getByTestId('redeem-button-2');
     expect(btn.props.accessibilityState?.disabled).toBe(true);
+  });
+
+  it('deve abrir modal de confirmação de resgate exibindo saldo atual vs novo saldo e disparar mutação', async () => {
+    const mockReward: Reward = {
+      id: 3,
+      establishmentId: 1,
+      title: 'Cupom R$ 20 OFF',
+      discountType: 'FIXED_AMOUNT',
+      discountValue: 20,
+      pointsCost: 100,
+      status: 'ACTIVE',
+      validityDays: 30,
+    };
+
+    const mockMutateAsync = jest.fn().mockResolvedValue({
+      coupon: { id: 99, code: 'CMRESG99' },
+    });
+
+    (useEstablishmentsModule.useEstablishmentDetails as jest.Mock).mockReturnValue({
+      data: mockStore,
+      isLoading: false,
+      isError: false,
+      refetch: jest.fn(),
+    });
+    (useCouponsModule.useCustomerEstablishmentRewards as jest.Mock).mockReturnValue({
+      data: [mockReward],
+      isLoading: false,
+      refetch: jest.fn(),
+    });
+    (useWalletModule.useCustomerBalances as jest.Mock).mockReturnValue({
+      data: [
+        {
+          id: 1,
+          currentBalance: 300,
+          totalAccumulated: 300,
+          establishment: { id: 1, tradeName: 'Padaria Real', status: 'ACTIVE' },
+        },
+      ],
+      isLoading: false,
+    });
+    (useCouponsModule.useRedeemRewardMutation as jest.Mock).mockReturnValue({
+      mutateAsync: mockMutateAsync,
+      isPending: false,
+    });
+
+    const { getByTestId, getByText, getAllByText } = await render(<ConsumerStoreDetailScreen />);
+
+    // Clica no botão de resgate da recompensa
+    await act(async () => {
+      fireEvent.press(getByTestId('redeem-button-3'));
+    });
+
+    // Modal deve ser exibido com os saldos calculados
+    expect(getByText('Confirmar Resgate')).toBeTruthy();
+    expect(getAllByText('300 pts').length).toBeGreaterThanOrEqual(1);
+    expect(getByText('-100 pts')).toBeTruthy();
+    expect(getByText('200 pts')).toBeTruthy();
+
+    // Clica no botão de confirmação do modal
+    await act(async () => {
+      fireEvent.press(getByTestId('modal-confirm-redeem-btn'));
+    });
+
+    expect(mockMutateAsync).toHaveBeenCalledWith(3);
   });
 });

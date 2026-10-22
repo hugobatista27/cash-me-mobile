@@ -70,7 +70,7 @@ export default function ConsumerCouponsScreen() {
   const tabs: { key: FilterTab; label: string; count: number }[] = [
     { key: 'ACTIVE', label: 'Ativos', count: activeCount },
     { key: 'USED', label: 'Utilizados', count: usedCount },
-    { key: 'INACTIVE', label: 'Expirados / Cancelados', count: inactiveCount },
+    { key: 'INACTIVE', label: 'Cancelados / Expirados', count: inactiveCount },
     { key: 'ALL', label: 'Todos', count: coupons.length },
   ];
 
