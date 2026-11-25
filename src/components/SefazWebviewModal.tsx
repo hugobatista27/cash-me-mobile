@@ -21,6 +21,39 @@ interface SefazWebviewModalProps {
   onExtracted: (data: NfceData, rawHtml: string) => void;
 }
 
+const ALLOWED_WEBVIEW_HOSTS = [
+  'sat.sef.sc.gov.br',
+  'fazenda.pr.gov.br',
+  'www.fazenda.pr.gov.br',
+  'dfe.sefa.pr.gov.br',
+  'google.com',
+  'www.google.com',
+  'gstatic.com',
+  'www.gstatic.com',
+  'recaptcha.net',
+  'www.recaptcha.net',
+  'hcaptcha.com',
+  'newassets.hcaptcha.com',
+  'challenges.cloudflare.com',
+  'cloudflare.com',
+];
+
+function isAllowedWebviewUrl(targetUrl?: string | null): boolean {
+  if (!targetUrl) return false;
+  try {
+    const parsed = new URL(targetUrl);
+    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+      return false;
+    }
+    const host = parsed.hostname.toLowerCase();
+    return ALLOWED_WEBVIEW_HOSTS.some(
+      (allowed) => host === allowed || host.endsWith(`.${allowed}`)
+    );
+  } catch {
+    return false;
+  }
+}
+
 export function SefazWebviewModal({
   visible,
   url,
@@ -28,20 +61,32 @@ export function SefazWebviewModal({
   onExtracted,
 }: SefazWebviewModalProps) {
   const webViewRef = useRef<WebView>(null);
+  const extractingRef = useRef(false);
   const [webViewLoading, setWebViewLoading] = useState(false);
   const [extracting, setExtracting] = useState(false);
   const [pageTitle, setPageTitle] = useState('Portal SEFAZ');
 
   const handleExtractNfce = () => {
+    extractingRef.current = true;
     setExtracting(true);
     webViewRef.current?.injectJavaScript(DOM_EXTRACTION_SCRIPT);
   };
 
   const handleWebViewMessage = (event: WebViewMessageEvent) => {
+    if (!extractingRef.current) {
+      return;
+    }
+
     try {
       const data = JSON.parse(event.nativeEvent.data);
       if (data.type === 'NFCE_DOM_EXTRACTED') {
         const { html, title, url: finalUrl } = data.payload || {};
+        if (finalUrl && !isAllowedWebviewUrl(finalUrl)) {
+          extractingRef.current = false;
+          setExtracting(false);
+          Alert.alert('Origem não autorizada', 'A página atual não pertence a um portal SEFAZ homologado.');
+          return;
+        }
         if (title) setPageTitle(title);
 
         const parsed = parseNfceHtml(html || '', finalUrl || url);
@@ -52,9 +97,11 @@ export function SefazWebviewModal({
           // Ignora erro em ambientes sem suporte
         }
 
+        extractingRef.current = false;
         setExtracting(false);
         onExtracted(parsed, html || '');
       } else if (data.type === 'NFCE_EXTRACT_ERROR') {
+        extractingRef.current = false;
         setExtracting(false);
         Alert.alert(
           'Erro na Extração',
@@ -62,6 +109,7 @@ export function SefazWebviewModal({
         );
       }
     } catch {
+      extractingRef.current = false;
       setExtracting(false);
       Alert.alert(
         'Erro ao Processar',
@@ -136,6 +184,8 @@ export function SefazWebviewModal({
               className="flex-1"
               javaScriptEnabled={true}
               domStorageEnabled={true}
+              originWhitelist={['https://*', 'http://www.fazenda.pr.gov.br*', 'http://fazenda.pr.gov.br*']}
+              onShouldStartLoadWithRequest={(req) => isAllowedWebviewUrl(req.url)}
               onLoadStart={() => setWebViewLoading(true)}
               onLoadEnd={() => setWebViewLoading(false)}
               onMessage={handleWebViewMessage}

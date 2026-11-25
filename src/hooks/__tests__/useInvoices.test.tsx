@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { renderHook, waitFor } from '@testing-library/react-native';
+import { act, renderHook, waitFor } from '@testing-library/react-native';
 import React from 'react';
 
 import { useProcessInvoice, useInvoiceDetails } from '../useInvoices';
@@ -7,13 +7,16 @@ import * as invoicesService from '@/services/invoices';
 
 jest.mock('@/services/invoices');
 
+let activeQueryClient: QueryClient | null = null;
+
 const createTestWrapper = () => {
   const queryClient = new QueryClient({
     defaultOptions: {
-      queries: { retry: false },
-      mutations: { retry: false },
+      queries: { retry: false, gcTime: 0 },
+      mutations: { retry: false, gcTime: 0 },
     },
   });
+  activeQueryClient = queryClient;
 
   const Wrapper = ({ children }: { children: React.ReactNode }) => (
     <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
@@ -25,6 +28,11 @@ const createTestWrapper = () => {
 describe('useInvoices hooks', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+  });
+
+  afterEach(() => {
+    activeQueryClient?.clear();
+    activeQueryClient = null;
   });
 
   const mockResponse: invoicesService.ProcessInvoiceResponse = {
@@ -59,9 +67,11 @@ describe('useInvoices hooks', () => {
       wrapper: Wrapper,
     });
 
-    await result.current.mutateAsync({
-      accessKey: '42230912345678000195650010000001231000001234',
-      issuerState: 'SC',
+    await act(async () => {
+      await result.current.mutateAsync({
+        accessKey: '42230912345678000195650010000001231000001234',
+        issuerState: 'SC',
+      });
     });
 
     expect(invoicesService.processInvoice).toHaveBeenCalled();

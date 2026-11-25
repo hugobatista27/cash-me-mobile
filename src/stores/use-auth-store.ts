@@ -1,5 +1,7 @@
 import { create } from 'zustand';
 
+import { authService } from '@/services/auth';
+import { queryClient } from '@/services/query-client';
 import {
   getAuthToken,
   getSessionData,
@@ -36,7 +38,7 @@ export interface Establishment {
   id: number;
   cnpj: string;
   tradeName: string;
-  status: 'ACTIVE' | 'PENDING' | 'BLOCKED' | 'SUSPENDED';
+  status: 'ACTIVE' | 'PENDING' | 'INACTIVE';
   legalName?: string;
 }
 
@@ -88,6 +90,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   clearAuth: async () => {
+    queryClient.clear();
     await removeAuthToken();
     await removeSessionData();
 
@@ -154,6 +157,12 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   logout: async () => {
+    try {
+      await authService.logout();
+    } catch {
+      // Ignora erro de rede ao revogar token no logout
+    }
+    queryClient.clear();
     await removeAuthToken();
     await removeSessionData();
 

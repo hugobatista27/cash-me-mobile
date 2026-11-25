@@ -34,7 +34,13 @@
           "imageWidth": 76
         }
       ],
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Permita que o Cash Me acesse sua câmera para escanear o QR Code de notas fiscais (NFC-e)."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

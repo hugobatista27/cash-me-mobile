@@ -100,17 +100,27 @@ export default function MerchantProfileScreen() {
             <View className="flex-row items-center gap-1.5 mt-1">
               <View
                 className={`w-2 h-2 rounded-full ${
-                  establishment?.status === 'PENDING' ? 'bg-amber-500' : 'bg-green-500'
+                  establishment?.status === 'PENDING'
+                    ? 'bg-amber-500'
+                    : establishment?.status === 'INACTIVE'
+                      ? 'bg-red-500'
+                      : 'bg-green-500'
                 }`}
               />
               <Text
                 className={`text-sm font-bold ${
-                  establishment?.status === 'PENDING' ? 'text-amber-600' : 'text-green-600'
+                  establishment?.status === 'PENDING'
+                    ? 'text-amber-600'
+                    : establishment?.status === 'INACTIVE'
+                      ? 'text-red-600'
+                      : 'text-green-600'
                 }`}
               >
                 {establishment?.status === 'PENDING'
                   ? 'Pendente de Homologação'
-                  : 'Ativo'}
+                  : establishment?.status === 'INACTIVE'
+                    ? 'Inativo / Suspenso'
+                    : 'Ativo'}
               </Text>
             </View>
           </View>

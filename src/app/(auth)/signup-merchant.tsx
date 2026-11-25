@@ -15,6 +15,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { z } from 'zod';
 
+import { extractApiErrorMessage } from '@/services/api';
 import { authService } from '@/services/auth';
 import { useAuthStore } from '@/stores/use-auth-store';
 import {
@@ -154,11 +155,9 @@ export default function SignupMerchantScreen() {
 
       router.replace('/(merchant)/(tabs)');
     } catch (err: unknown) {
-      const maybeAxios = err as { response?: { data?: { message?: string } } };
-      const msg =
-        maybeAxios?.response?.data?.message ||
-        'Falha no cadastro do estabelecimento. Verifique os dados informados.';
-      setErrorMessage(msg);
+      setErrorMessage(
+        extractApiErrorMessage(err, 'Falha no cadastro do estabelecimento. Verifique os dados informados.')
+      );
     }
   };
 

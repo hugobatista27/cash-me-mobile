@@ -17,10 +17,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { NfceResultView } from '@/components/NfceResultView';
 import { SefazWebviewModal } from '@/components/SefazWebviewModal';
 import { useProcessInvoice } from '@/hooks/useInvoices';
+import { extractApiErrorMessage } from '@/services/api';
 import {
+  isIssuedWithin48Hours,
   NfceData,
   ParsedNfce,
   parseNfceContent,
+  parsePtBrDateToIso,
 } from '@/utils/nfceParser';
 
 const DEFAULT_SEFAZ_SC_URL = 'https://sat.sef.sc.gov.br/nfce/consulta';
@@ -89,6 +92,7 @@ export default function ConsumerScanScreen() {
           tradeName: response.establishment?.tradeName || 'Estabelecimento Parceiro',
           accessKey: response.invoice.accessKey,
           status: response.status,
+          rejectionReason: response.rejectionReason || '',
         },
       });
     } catch (err: unknown) {
@@ -97,7 +101,6 @@ export default function ConsumerScanScreen() {
       };
       const status = maybeAxios?.response?.status;
       const code = maybeAxios?.response?.data?.code;
-      const message = maybeAxios?.response?.data?.message;
 
       if (status === 409 || code === 'E_DUPLICATE_INVOICE') {
         Alert.alert(
@@ -107,7 +110,7 @@ export default function ConsumerScanScreen() {
       } else {
         Alert.alert(
           'Erro ao Processar Nota',
-          message || 'Ocorreu um erro ao enviar a nota para a SEFAZ ou ao computar os pontos.'
+          extractApiErrorMessage(err, 'Ocorreu um erro ao enviar a nota para a SEFAZ ou ao computar os pontos.')
         );
       }
     } finally {
@@ -185,22 +188,62 @@ export default function ConsumerScanScreen() {
     const accessKey = data.info.chaveAcesso.replace(/\D/g, '');
     const stateCode = accessKey.substring(0, 2);
     const issuerState = stateCode === '42' ? 'SC' : stateCode === '41' ? 'PR' : undefined;
+    const issuerCnpj = data.emitente.cnpj.replace(/\D/g, '') || (accessKey.length === 44 ? accessKey.substring(6, 20) : '');
+    const totalAmount = data.totais.valorPagar || data.totais.valorTotal || 0;
+    const extractedIso = parsePtBrDateToIso(data.info.dataEmissao);
 
-    let pointsAwarded = 0;
+    let pointsAwarded: number | undefined;
     let balance: number | undefined;
+
+    if (accessKey.length !== 44 || !issuerState || totalAmount <= 0) {
+      setIsProcessing(false);
+      lastScannedCodeRef.current = null;
+      Alert.alert(
+        'Extração Incompleta',
+        'Não foi possível identificar a chave de 44 dígitos ou o valor total da nota na página da SEFAZ.'
+      );
+      setExtractedResult({ data, rawHtml });
+      return;
+    }
+
+    if (data.info.dataEmissao && !isIssuedWithin48Hours(data.info.dataEmissao)) {
+      setIsProcessing(false);
+      lastScannedCodeRef.current = null;
+      Alert.alert(
+        'Nota Expirada (RN01)',
+        'Esta nota fiscal foi emitida há mais de 48 horas e não é elegível para pontuação.'
+      );
+      setExtractedResult({ data, rawHtml });
+      return;
+    }
 
     try {
       const response = await processMutation.mutateAsync({
         accessKey,
         qrCodeUrl: data.url,
         issuerState,
-        issuerCnpj: data.emitente.cnpj.replace(/\D/g, ''),
-        issuedAt: new Date().toISOString(),
-        totalAmount: data.totais.valorPagar || data.totais.valorTotal || 100.0,
+        issuerCnpj,
+        issuedAt: extractedIso || new Date().toISOString(),
+        totalAmount,
+        items: data.itens.map((item) => ({
+          rawDescription: item.descricao,
+          quantity: item.quantidade,
+          unitPrice: item.valorUnitario,
+          totalPrice: item.valorTotal,
+        })),
       });
 
-      pointsAwarded = response.pointsAwarded;
-      balance = response.balance?.currentBalance;
+      if (response.status === 'REJECTED') {
+        Alert.alert(
+          'Nota Não Pontuada',
+          response.rejectionReason
+            ? `Motivo: ${response.rejectionReason}`
+            : 'A nota foi extraída, mas rejeitada pelas regras de pontuação.'
+        );
+      } else {
+        pointsAwarded = response.pointsAwarded;
+        balance = response.balance?.currentBalance;
+      }
     } catch (err: unknown) {
       const maybeAxios = err as {
         response?: { status?: number; data?: { code?: string; message?: string } };
@@ -212,6 +255,11 @@ export default function ConsumerScanScreen() {
         Alert.alert(
           'Nota Já Pontuada (RN02)',
           'Esta nota fiscal já concedeu pontos anteriormente no Cash Me. Os produtos foram extraídos para sua conferência.'
+        );
+      } else {
+        Alert.alert(
+          'Erro ao Computar Pontos',
+          extractApiErrorMessage(err, 'Não foi possível processar os pontos desta nota na API.')
         );
       }
     } finally {
@@ -262,6 +310,17 @@ export default function ConsumerScanScreen() {
   if (!permission.granted) {
     return (
       <SafeAreaView className="flex-1 bg-neutros-fundo justify-between p-6">
+        {sefazModalUrl && (
+          <SefazWebviewModal
+            visible={Boolean(sefazModalUrl)}
+            url={sefazModalUrl}
+            onClose={() => {
+              setSefazModalUrl(null);
+              lastScannedCodeRef.current = null;
+            }}
+            onExtracted={handleWebviewExtracted}
+          />
+        )}
         <View className="items-center mt-12">
           <View className="w-20 h-20 rounded-3xl bg-consumidor/10 items-center justify-center mb-6">
             <Ionicons name="camera-outline" size={40} color="#008D4C" />
@@ -349,7 +408,7 @@ export default function ConsumerScanScreen() {
         {/* Topo: Título e controles */}
         <View className="flex-row items-center justify-between">
           <TouchableOpacity
-            onPress={() => router.back()}
+            onPress={() => (router.canGoBack() ? router.back() : router.replace('/(consumer)/(tabs)'))}
             accessibilityLabel="Fechar"
             accessibilityRole="button"
             className="w-11 h-11 rounded-full bg-black/40 items-center justify-center border border-white/20"

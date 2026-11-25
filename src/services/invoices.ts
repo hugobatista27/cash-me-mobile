@@ -1,5 +1,12 @@
 import { apiClient } from '@/services/api';
 
+export interface ProcessInvoiceItemInput {
+  rawDescription: string;
+  quantity: number;
+  unitPrice: number;
+  totalPrice: number;
+}
+
 export interface ProcessInvoicePayload {
   accessKey: string;
   qrCodeUrl?: string;
@@ -7,6 +14,7 @@ export interface ProcessInvoicePayload {
   issuerCnpj?: string;
   issuedAt?: string;
   totalAmount?: number;
+  items?: ProcessInvoiceItemInput[];
 }
 
 export interface InvoiceItem {
@@ -16,6 +24,8 @@ export interface InvoiceItem {
   status: 'PENDING' | 'PROCESSED' | 'REJECTED';
   rejectionReason?: string | null;
   issuedAt?: string;
+  issuerCnpj?: string;
+  pointsAwarded?: number;
 }
 
 export interface ProcessInvoiceResponse {
@@ -60,13 +70,32 @@ export const getInvoiceDetails = async (
   id: number | string
 ): Promise<ProcessInvoiceResponse> => {
   const response = await apiClient.get<
-    ProcessInvoiceResponse | { data: ProcessInvoiceResponse }
+    ProcessInvoiceResponse | InvoiceItem | { data: ProcessInvoiceResponse | InvoiceItem }
   >(`/customer/invoices/${id}`);
 
   const raw = response.data;
-  if (raw && typeof raw === 'object' && 'data' in raw && (raw as { data: ProcessInvoiceResponse }).data) {
-    return (raw as { data: ProcessInvoiceResponse }).data;
+  const unwrapped =
+    raw && typeof raw === 'object' && 'data' in raw && raw.data ? raw.data : raw;
+
+  if (unwrapped && typeof unwrapped === 'object' && 'invoice' in unwrapped) {
+    return unwrapped as ProcessInvoiceResponse;
   }
 
-  return raw as ProcessInvoiceResponse;
+  const flat = unwrapped as InvoiceItem;
+  return {
+    invoice: {
+      id: flat.id,
+      accessKey: flat.accessKey,
+      totalAmount: Number(flat.totalAmount ?? 0),
+      status: flat.status,
+      rejectionReason: flat.rejectionReason ?? null,
+      issuedAt: flat.issuedAt,
+    },
+    pointsAwarded: Number(flat.pointsAwarded ?? 0),
+    status: flat.status === 'REJECTED' ? 'REJECTED' : 'PROCESSED',
+    rejectionReason: flat.rejectionReason ?? null,
+    establishment: flat.issuerCnpj
+      ? { id: 0, tradeName: 'Estabelecimento Parceiro', cnpj: flat.issuerCnpj }
+      : undefined,
+  };
 };

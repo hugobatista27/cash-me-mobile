@@ -47,8 +47,8 @@ describe('NfceResultView', () => {
     rawHtmlLength: 1024,
   };
 
-  it('deve renderizar dados do emitente, chave de acesso e total a pagar', () => {
-    render(
+  it('deve renderizar dados do emitente, chave de acesso e total a pagar', async () => {
+    await render(
       <NfceResultView
         data={mockNfceData}
         pointsAwarded={35}
@@ -63,8 +63,8 @@ describe('NfceResultView', () => {
     expect(screen.getByText(/Novo saldo na loja: 120 pts/)).toBeTruthy();
   });
 
-  it('deve listar os itens da NFC-e corretamente', () => {
-    render(
+  it('deve listar os itens da NFC-e corretamente', async () => {
+    await render(
       <NfceResultView
         data={mockNfceData}
         onReset={jest.fn()}
@@ -75,9 +75,9 @@ describe('NfceResultView', () => {
     expect(screen.getByText('Café Espresso')).toBeTruthy();
   });
 
-  it('deve acionar onReset ao clicar em Escanear Outra Nota', () => {
+  it('deve acionar onReset ao clicar em Escanear Outra Nota', async () => {
     const onResetMock = jest.fn();
-    render(
+    await render(
       <NfceResultView
         data={mockNfceData}
         onReset={onResetMock}

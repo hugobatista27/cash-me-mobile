@@ -71,17 +71,34 @@ apiClient.interceptors.response.use(
 );
 
 /**
- * Endpoint de health check para validação de conectividade em modo desenvolvimento.
- * Tenta GET / e faz fallback para GET /swagger.
+ * Extrai mensagem de erro legível de respostas da API AdonisJS/VineJS (`message` ou `errors[0].message`).
+ */
+export const extractApiErrorMessage = (err: unknown, fallback: string): string => {
+  const maybeAxios = err as {
+    response?: {
+      data?: {
+        message?: string;
+        errors?: { message?: string }[];
+      };
+    };
+  };
+  const data = maybeAxios?.response?.data;
+  return data?.message || data?.errors?.[0]?.message || fallback;
+};
+
+/**
+ * Endpoint de health check para validação de conectividade.
+ * Tenta GET /api/v1/health e faz fallback para GET / na raiz do servidor.
  */
 export const checkHealth = async (config?: AxiosRequestConfig): Promise<boolean> => {
   try {
-    const response = await apiClient.get('/', config);
+    const response = await apiClient.get('/health', config);
     return response.status >= 200 && response.status < 300;
   } catch {
     try {
-      const swaggerResponse = await apiClient.get('/swagger', config);
-      return swaggerResponse.status >= 200 && swaggerResponse.status < 300;
+      const rootUrl = API_BASE_URL.replace(/\/api\/v1\/?$/, '') + '/';
+      const rootResponse = await axios.get(rootUrl, { timeout: 15000, ...config });
+      return rootResponse.status >= 200 && rootResponse.status < 300;
     } catch {
       return false;
     }

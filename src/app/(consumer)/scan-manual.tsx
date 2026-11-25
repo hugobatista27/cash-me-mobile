@@ -16,6 +16,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { SefazWebviewModal } from '@/components/SefazWebviewModal';
 import { useProcessInvoice } from '@/hooks/useInvoices';
+import { extractApiErrorMessage } from '@/services/api';
 import { extractAccessKey, formatAccessKey, parseNfceContent } from '@/utils/nfceParser';
 
 export default function ConsumerScanManualScreen() {
@@ -76,13 +77,13 @@ export default function ConsumerScanManualScreen() {
           tradeName: response.establishment?.tradeName || 'Estabelecimento Parceiro',
           accessKey: response.invoice.accessKey,
           status: response.status,
+          rejectionReason: response.rejectionReason || '',
         },
       });
     } catch (err: unknown) {
       const maybeAxios = err as { response?: { status?: number; data?: { code?: string; message?: string } } };
       const status = maybeAxios?.response?.status;
       const code = maybeAxios?.response?.data?.code;
-      const message = maybeAxios?.response?.data?.message;
 
       if (status === 409 || code === 'E_DUPLICATE_INVOICE') {
         Alert.alert(
@@ -92,7 +93,7 @@ export default function ConsumerScanManualScreen() {
       } else {
         Alert.alert(
           'Erro ao Processar Nota',
-          message || 'Não foi possível validar e computar os pontos para esta chave de acesso.'
+          extractApiErrorMessage(err, 'Não foi possível validar e computar os pontos para esta chave de acesso.')
         );
       }
     }

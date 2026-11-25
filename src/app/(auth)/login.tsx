@@ -15,6 +15,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { z } from 'zod';
 
+import { extractApiErrorMessage } from '@/services/api';
 import { authService } from '@/services/auth';
 import { useAuthStore } from '@/stores/use-auth-store';
 
@@ -56,6 +57,11 @@ export default function LoginScreen() {
         password: data.password,
       });
 
+      if (response.user.userType !== 'ESTABLISHMENT' && response.user.userType !== 'CUSTOMER') {
+        setErrorMessage('Tipo de conta não suportado no aplicativo móvel. Utilize o painel administrativo.');
+        return;
+      }
+
       await setAuth({
         user: response.user,
         token: response.token,
@@ -69,11 +75,7 @@ export default function LoginScreen() {
         router.replace('/(consumer)/(tabs)');
       }
     } catch (err: unknown) {
-      const maybeAxios = err as { response?: { data?: { message?: string } } };
-      const msg =
-        maybeAxios?.response?.data?.message ||
-        'Falha ao autenticar. Verifique seu e-mail e senha.';
-      setErrorMessage(msg);
+      setErrorMessage(extractApiErrorMessage(err, 'Falha ao autenticar. Verifique seu e-mail e senha.'));
     }
   };
 

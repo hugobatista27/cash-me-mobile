@@ -11,13 +11,16 @@ import { loyaltyRulesService } from '@/services/loyaltyRules';
 
 jest.mock('@/services/loyaltyRules');
 
+let activeQueryClient: QueryClient | null = null;
+
 const createWrapper = () => {
   const queryClient = new QueryClient({
     defaultOptions: {
-      queries: { retry: false },
-      mutations: { retry: false },
+      queries: { retry: false, gcTime: 0 },
+      mutations: { retry: false, gcTime: 0 },
     },
   });
+  activeQueryClient = queryClient;
 
   const Wrapper = ({ children }: { children: React.ReactNode }) => (
     <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
@@ -29,6 +32,11 @@ const createWrapper = () => {
 describe('useLoyaltyRules hooks', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+  });
+
+  afterEach(() => {
+    activeQueryClient?.clear();
+    activeQueryClient = null;
   });
 
   it('useActiveLoyaltyRule deve carregar a regra ativa com sucesso', async () => {
@@ -93,8 +101,11 @@ describe('useLoyaltyRules hooks', () => {
 
     (loyaltyRulesService.updateRule as jest.Mock).mockResolvedValueOnce(newRule);
 
+    const wrapper = createWrapper();
+    const invalidateSpy = jest.spyOn(activeQueryClient!, 'invalidateQueries');
+
     const { result } = await renderHook(() => useUpdateLoyaltyRule(), {
-      wrapper: createWrapper(),
+      wrapper,
     });
 
     await act(async () => {
@@ -114,6 +125,7 @@ describe('useLoyaltyRules hooks', () => {
       maxPointsPerPurchase: 500,
       name: 'Regra v2',
     });
+    expect(invalidateSpy).toHaveBeenCalled();
   });
 
   it('useLoyaltyRuleHistory deve carregar a lista de histórico', async () => {

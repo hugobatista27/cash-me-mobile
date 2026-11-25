@@ -1,6 +1,6 @@
 import { Link, Stack } from 'expo-router';
 import React from 'react';
-import { Text, View } from 'react-native';
+import { Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function NotFoundScreen() {
@@ -22,11 +22,14 @@ export default function NotFoundScreen() {
           </Text>
 
           <Link href="/" asChild>
-            <View className="w-full bg-consumidor py-3.5 px-6 rounded-2xl items-center active:opacity-90">
+            <TouchableOpacity
+              activeOpacity={0.85}
+              className="w-full bg-consumidor py-3.5 px-6 rounded-2xl items-center"
+            >
               <Text className="text-white font-semibold text-base">
                 Voltar ao Início
               </Text>
-            </View>
+            </TouchableOpacity>
           </Link>
         </View>
       </SafeAreaView>
