@@ -1,0 +1,311 @@
+appId: host.exp.exponent
+---
+# ==============================================================================
+# Teste de Regressão E2E Maestro — Cadastro e Login
+# Cobre:
+# 1. Submissão vazia no cadastro (banner de resumo + erros em PT-BR + auto-scroll)
+# 2. Validação client-side (CPF inválido, senha > 32 chars, senhas divergentes)
+# 3. Cadastro válido com e-mail contendo espaços/maiúsculas e CPF Mod-11 válido
+# 4. Erro de e-mail duplicado case-insensitive em PT-BR vindo da API
+# 5. Erro de credenciais inválidas em PT-BR no login + login case-insensitive
+# ==============================================================================
+
+# 0. Normaliza estado inicial (volta ao login ou desloga se houver sessão ativa)
+- runFlow:
+    when:
+      visible: "← Voltar para login"
+    commands:
+      - tapOn: "← Voltar para login"
+
+- runFlow:
+    when:
+      visible: "Área do Consumidor"
+    commands:
+      - tapOn: "Perfil"
+      - extendedWaitUntil:
+          visible: "Encerrar Sessão"
+          timeout: 10000
+      - tapOn: "Encerrar Sessão"
+      - extendedWaitUntil:
+          visible: "Sair"
+          timeout: 5000
+      - tapOn: "Sair"
+
+- runFlow:
+    when:
+      visible: "Painel do Estabelecimento"
+    commands:
+      - tapOn: "Perfil Loja"
+      - extendedWaitUntil:
+          visible: "Encerrar Sessão"
+          timeout: 10000
+      - tapOn: "Encerrar Sessão"
+      - extendedWaitUntil:
+          visible: "Sair"
+          timeout: 5000
+      - tapOn: "Sair"
+
+- extendedWaitUntil:
+    visible: "Bem-vindo ao CashMe"
+    timeout: 20000
+
+# 1. Navega para Cadastro de Consumidor
+- tapOn: "Criar conta Consumidor"
+- extendedWaitUntil:
+    visible: "Criar Conta Consumidor"
+    timeout: 5000
+
+# 2. Submissão vazia -> deve exibir banner e erros obrigatórios em PT-BR
+- scrollUntilVisible:
+    element: "Cadastrar"
+    direction: DOWN
+    timeout: 10000
+- tapOn: "Cadastrar"
+
+- extendedWaitUntil:
+    visible: "Corrija os campos destacados:.*"
+    timeout: 5000
+- assertVisible: "Nome completo é obrigatório"
+- assertVisible: "E-mail é obrigatório"
+- assertVisible: "CPF é obrigatório"
+
+# 3. Validações client-side (CPF inválido, senha > 32 chars, confirmação divergente)
+- tapOn:
+    below: "CPF"
+- inputText: "11111111111"
+- hideKeyboard
+
+- scrollUntilVisible:
+    element: "Confirmar Senha"
+    direction: DOWN
+    timeout: 10000
+
+- tapOn:
+    below: "Senha"
+- inputText: "12345678901234567890123456789012345"
+- hideKeyboard
+
+- tapOn:
+    below: "Confirmar Senha"
+- inputText: "outrasenha123"
+- hideKeyboard
+
+- scrollUntilVisible:
+    element: "Cadastrar"
+    direction: DOWN
+    timeout: 10000
+- tapOn: "Cadastrar"
+
+- extendedWaitUntil:
+    visible: "Corrija os campos destacados:.*"
+    timeout: 5000
+- assertVisible: "CPF inválido"
+
+- scrollUntilVisible:
+    element: "A senha deve ter no máximo 32 caracteres"
+    direction: DOWN
+    timeout: 5000
+- assertVisible: "As senhas não coincidem"
+
+# 4. Gera dados únicos (2 CPFs Mod-11 válidos e e-mails com espaços/case)
+- evalScript: ${var ts=Date.now(); function g(s){var d=[]; for(var i=0;i<9;i++)d.push((s+i*3+(i%2))%10); if(d.every(function(x){return x===d[0];}))d[8]=(d[8]+1)%10; var s1=0; for(var j=0;j<9;j++)s1+=d[j]*(10-j); var r1=(s1*10)%11; d.push(r1===10?0:r1); var s2=0; for(var k=0;k<10;k++)s2+=d[k]*(11-k); var r2=(s2*10)%11; d.push(r2===10?0:r2); return d.join('');} output.cpf1=g(ts%100000); output.cpf2=g((ts+137)%100000); output.emailLower='reg.'+ts+'@cashme.test'; output.emailRaw='  Reg.'+ts+'@CashMe.Test  '; output.emailUpper='REG.'+ts+'@CASHME.TEST';}
+
+# 5. Volta ao login e reabre cadastro para garantir formulário limpo
+- scrollUntilVisible:
+    element: "← Voltar para login"
+    direction: UP
+    timeout: 10000
+- tapOn: "← Voltar para login"
+- extendedWaitUntil:
+    visible: "Bem-vindo ao CashMe"
+    timeout: 10000
+- tapOn: "Criar conta Consumidor"
+- extendedWaitUntil:
+    visible: "Criar Conta Consumidor"
+    timeout: 5000
+
+# Preenche cadastro válido com espaços e letras mistas no e-mail
+- tapOn:
+    below: "Nome Completo"
+- inputText: "Consumidor Regressão"
+- hideKeyboard
+
+- tapOn:
+    below: "E-mail"
+- inputText: ${output.emailRaw}
+- hideKeyboard
+
+- tapOn:
+    below: "CPF"
+- inputText: ${output.cpf1}
+- hideKeyboard
+
+- tapOn:
+    below: "Telefone Celular"
+- inputText: "48999887766"
+- hideKeyboard
+
+- scrollUntilVisible:
+    element: "Confirmar Senha"
+    direction: DOWN
+    timeout: 10000
+
+- tapOn:
+    below: "Senha"
+- inputText: "password123"
+- hideKeyboard
+
+- tapOn:
+    below: "Confirmar Senha"
+- inputText: "password123"
+- hideKeyboard
+
+- scrollUntilVisible:
+    element: "Cadastrar"
+    direction: DOWN
+    speed: 60
+    visibilityPercentage: 50
+    timeout: 10000
+
+- tapOn: "Declaro que li e aceito os Termos de Uso e a Política de Privacidade."
+- tapOn: "Cadastrar"
+
+# Confirma redirecionamento para área do consumidor
+- extendedWaitUntil:
+    visible: "Área do Consumidor"
+    timeout: 15000
+- assertVisible: "Olá, Consumidor Regressão 👋"
+- assertVisible: "Pontos Disponíveis (Total)"
+
+# Faz logout
+- tapOn: "Perfil"
+- extendedWaitUntil:
+    visible: "Encerrar Sessão"
+    timeout: 10000
+- tapOn: "Encerrar Sessão"
+- extendedWaitUntil:
+    visible: "Sair"
+    timeout: 5000
+- tapOn: "Sair"
+- extendedWaitUntil:
+    visible: "Bem-vindo ao CashMe"
+    timeout: 10000
+
+# 6. Testa erro de e-mail duplicado case-insensitive em PT-BR
+- tapOn: "Criar conta Consumidor"
+- extendedWaitUntil:
+    visible: "Criar Conta Consumidor"
+    timeout: 5000
+
+- tapOn:
+    below: "Nome Completo"
+- inputText: "Outro Consumidor"
+- hideKeyboard
+
+- tapOn:
+    below: "E-mail"
+- inputText: ${output.emailUpper}
+- hideKeyboard
+
+- tapOn:
+    below: "CPF"
+- inputText: ${output.cpf2}
+- hideKeyboard
+
+- tapOn:
+    below: "Telefone Celular"
+- inputText: "48999887755"
+- hideKeyboard
+
+- scrollUntilVisible:
+    element: "Confirmar Senha"
+    direction: DOWN
+    timeout: 10000
+
+- tapOn:
+    below: "Senha"
+- inputText: "password123"
+- hideKeyboard
+
+- tapOn:
+    below: "Confirmar Senha"
+- inputText: "password123"
+- hideKeyboard
+
+- scrollUntilVisible:
+    element: "Cadastrar"
+    direction: DOWN
+    timeout: 10000
+
+- tapOn: "Declaro que li e aceito os Termos de Uso e a Política de Privacidade."
+- tapOn: "Cadastrar"
+
+- extendedWaitUntil:
+    visible: "Este e-mail já está cadastrado no sistema."
+    timeout: 10000
+
+- scrollUntilVisible:
+    element: "← Voltar para login"
+    direction: UP
+    timeout: 10000
+- tapOn: "← Voltar para login"
+- extendedWaitUntil:
+    visible: "Bem-vindo ao CashMe"
+    timeout: 10000
+
+# 7. Testa credenciais inválidas em PT-BR e login case-insensitive
+- tapOn:
+    below: "E-mail"
+- eraseText: 60
+- inputText: ${output.emailLower}
+- hideKeyboard
+
+- tapOn:
+    below: "Senha"
+- eraseText: 50
+- inputText: "wrongpass999"
+- hideKeyboard
+
+- tapOn: "Entrar"
+- extendedWaitUntil:
+    visible: "E-mail ou senha incorretos."
+    timeout: 10000
+
+- tapOn: "Criar conta Consumidor"
+- extendedWaitUntil:
+    visible: "← Voltar para login"
+    timeout: 5000
+- tapOn: "← Voltar para login"
+- extendedWaitUntil:
+    visible: "Bem-vindo ao CashMe"
+    timeout: 5000
+
+- tapOn:
+    below: "E-mail"
+- inputText: ${output.emailUpper}
+- hideKeyboard
+
+- tapOn:
+    below: "Senha"
+- inputText: "password123"
+- hideKeyboard
+
+- tapOn: "Entrar"
+- extendedWaitUntil:
+    visible: "Área do Consumidor"
+    timeout: 15000
+- assertVisible: "Olá, Consumidor Regressão 👋"
+
+# 8. Logout final para higienizar o estado
+- tapOn: "Perfil"
+- extendedWaitUntil:
+    visible: "Encerrar Sessão"
+    timeout: 10000
+- tapOn: "Encerrar Sessão"
+- extendedWaitUntil:
+    visible: "Sair"
+    timeout: 5000
+- tapOn: "Sair"
+- extendedWaitUntil:
+    visible: "Bem-vindo ao CashMe"
+    timeout: 10000

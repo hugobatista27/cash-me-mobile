@@ -5,12 +5,51 @@ appId: host.exp.exponent
 # 1. Cadastro Real de Cliente/Consumidor -> Redirecionamento para (consumer)/(tabs)
 # 2. Logout Real com Limpeza de Sessão
 # 3. Cadastro Real de Estabelecimento/Lojista -> Redirecionamento para (merchant)/(tabs)
+# 4. Logout Final para Higienização
 # ==============================================================================
+
+# 0. Normaliza estado inicial
+- runFlow:
+    when:
+      visible: "← Voltar para login"
+    commands:
+      - tapOn: "← Voltar para login"
+
+- runFlow:
+    when:
+      visible: "Área do Consumidor"
+    commands:
+      - tapOn: "Perfil"
+      - extendedWaitUntil:
+          visible: "Encerrar Sessão"
+          timeout: 10000
+      - tapOn: "Encerrar Sessão"
+      - extendedWaitUntil:
+          visible: "Sair"
+          timeout: 5000
+      - tapOn: "Sair"
+
+- runFlow:
+    when:
+      visible: "Painel do Estabelecimento"
+    commands:
+      - tapOn: "Perfil Loja"
+      - extendedWaitUntil:
+          visible: "Encerrar Sessão"
+          timeout: 10000
+      - tapOn: "Encerrar Sessão"
+      - extendedWaitUntil:
+          visible: "Sair"
+          timeout: 5000
+      - tapOn: "Sair"
 
 # Aguarda tela de login
 - extendedWaitUntil:
     visible: "Bem-vindo ao CashMe"
     timeout: 15000
+
+# Gera dados únicos (CPF Mod-11 e CNPJ Mod-11 válidos + e-mails únicos)
+- evalScript: ${var ts=Date.now(); function gCpf(seed){var x=seed%1000000007, d=[]; for(var i=0;i<9;i++){x=(x*1103515245+12345)%2147483647; d.push(x%10);} if(d.every(function(v){return v===d[0];}))d[8]=(d[8]+1)%10; var s1=0; for(var j=0;j<9;j++)s1+=d[j]*(10-j); var r1=(s1*10)%11; d.push(r1===10?0:r1); var s2=0; for(var k=0;k<10;k++)s2+=d[k]*(11-k); var r2=(s2*10)%11; d.push(r2===10?0:r2); return d.join('');} function gCnpj(seed){var x=seed%1000000007, b=[]; for(var i=0;i<8;i++){x=(x*1103515245+12345)%2147483647; b.push(x%10);} b.push(0,0,0,1); var w1=[5,4,3,2,9,8,7,6,5,4,3,2], s1=0; for(var j=0;j<12;j++)s1+=b[j]*w1[j]; var r1=s1%11; b.push(r1<2?0:11-r1); var w2=[6,5,4,3,2,9,8,7,6,5,4,3,2], s2=0; for(var k=0;k<13;k++)s2+=b[k]*w2[k]; var r2=s2%11; b.push(r2<2?0:11-r2); return b.join('');} output.cpf=gCpf(ts); output.cnpj=gCnpj(ts+7919); output.consumerEmail='auth.c.'+ts+'@cashme.test'; output.merchantEmail='auth.m.'+ts+'@cashme.test';}
 
 # ------------------------------------------------------------------------------
 # PARTE 1: CADASTRO REAL DE CONSUMIDOR
@@ -22,25 +61,35 @@ appId: host.exp.exponent
 - inputText: "Consumidor E2E"
 
 - tapOn: "seu.email@exemplo.com"
-- inputText: "cliente.live3@cashme.com"
+- inputText: ${output.consumerEmail}
 
 - tapOn: "000.000.000-00"
-- inputText: "70167044591"
+- inputText: ${output.cpf}
 
 - tapOn: "(00) 00000-0000"
 - inputText: "11987654321"
 
+- scrollUntilVisible:
+    element: "Confirmar Senha"
+    direction: DOWN
+    timeout: 10000
+
 - tapOn: "Mínimo 8 caracteres"
 - inputText: "password123"
-
 - hideKeyboard
 
 - tapOn: "Repita sua senha"
 - inputText: "password123"
-
 - hideKeyboard
 
-# Aceita os termos de uso (visível e desobstruído com teclado fechado)
+- scrollUntilVisible:
+    element: "Cadastrar"
+    direction: DOWN
+    speed: 60
+    visibilityPercentage: 50
+    timeout: 10000
+
+# Aceita os termos de uso
 - tapOn: "Declaro que li e aceito os Termos de Uso e a Política de Privacidade."
 
 # Submete cadastro do consumidor
@@ -52,7 +101,7 @@ appId: host.exp.exponent
     timeout: 15000
 
 - assertVisible: "Olá, Consumidor E2E 👋"
-- assertVisible: "Pontos Acumulados"
+- assertVisible: "Pontos Disponíveis (Total)"
 - assertVisible: "Início"
 - assertVisible: "Carteira"
 - assertVisible: "Escanear"
@@ -84,77 +133,91 @@ appId: host.exp.exponent
 # 1. Dados do Administrador
 - tapOn: "Ex: Carlos Eduardo"
 - inputText: "Carlos Gestor"
+- hideKeyboard
 
 - tapOn: "contato@minhaloja.com"
-- inputText: "lojista.live3@cashme.com"
+- inputText: ${output.merchantEmail}
+- hideKeyboard
+
+- scrollUntilVisible:
+    element: "Confirmar Senha"
+    direction: DOWN
+    timeout: 10000
 
 - tapOn: "Mínimo 8 caracteres"
 - inputText: "password123"
-
 - hideKeyboard
 
 - tapOn: "Repita sua senha"
 - inputText: "password123"
-
 - hideKeyboard
 
 # 2. Dados da Empresa
-- tapOn: "00.000.000/0000-00"
-- inputText: "50401244000154"
+- scrollUntilVisible:
+    element: "CNPJ"
+    direction: DOWN
+    timeout: 10000
 
+- tapOn: "00.000.000/0000-00"
+- inputText: ${output.cnpj}
 - hideKeyboard
 
 - tapOn: "Ex: Comercial de Alimentos Ltda"
 - inputText: "Padaria Central E2E Ltda"
-
 - hideKeyboard
 
 - tapOn: "Ex: Supermercado Central"
 - inputText: "Padaria Central E2E"
-
 - hideKeyboard
 
 - tapOn: "(00) 0000-0000"
 - inputText: "1133334444"
-
 - hideKeyboard
 
 # Rola a tela para preencher Endereço Comercial
-- scroll
+- scrollUntilVisible:
+    element: "CEP"
+    direction: DOWN
+    timeout: 10000
 
 # 3. Endereço Comercial
 - tapOn: "00000-000"
 - inputText: "88010000"
-
 - hideKeyboard
 
 - tapOn: "Ex: Av. Brasil"
 - inputText: "Rua Felipe Schmidt"
-
 - hideKeyboard
 
 - tapOn: "123"
 - inputText: "450"
-
 - hideKeyboard
+
+- scrollUntilVisible:
+    element: "Cadastrar Comércio"
+    direction: DOWN
+    speed: 60
+    visibilityPercentage: 50
+    timeout: 10000
 
 - tapOn: "Centro"
 - inputText: "Centro"
-
 - hideKeyboard
 
 - tapOn: "São Paulo"
 - inputText: "Florianópolis"
-
 - hideKeyboard
 
 - tapOn: "SP"
 - inputText: "SC"
-
 - hideKeyboard
 
-# Rola para garantir visibilidade do botão de submissão
-- scroll
+- scrollUntilVisible:
+    element: "Cadastrar Comércio"
+    direction: DOWN
+    speed: 60
+    visibilityPercentage: 50
+    timeout: 10000
 
 # Submete cadastro do comércio
 - tapOn: "Cadastrar Comércio"
@@ -171,3 +234,17 @@ appId: host.exp.exponent
 - assertVisible: "Regras"
 - assertVisible: "Clientes"
 - assertVisible: "Perfil Loja"
+
+# Logout final para higienizar o estado
+- tapOn: "Perfil Loja"
+- extendedWaitUntil:
+    visible: "Encerrar Sessão"
+    timeout: 10000
+- tapOn: "Encerrar Sessão"
+- extendedWaitUntil:
+    visible: "Sair"
+    timeout: 5000
+- tapOn: "Sair"
+- extendedWaitUntil:
+    visible: "Bem-vindo ao CashMe"
+    timeout: 10000

@@ -1,7 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import { CameraView, useCameraPermissions } from 'expo-camera';
+import * as Clipboard from 'expo-clipboard';
 import { useRouter } from 'expo-router';
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -21,12 +22,12 @@ import { extractApiErrorMessage } from '@/services/api';
 import {
   isIssuedWithin48Hours,
   NfceData,
-  ParsedNfce,
   parseNfceContent,
   parsePtBrDateToIso,
 } from '@/utils/nfceParser';
 
 const DEFAULT_SEFAZ_SC_URL = 'https://sat.sef.sc.gov.br/nfce/consulta';
+const DEFAULT_SEFAZ_PR_URL = 'https://www.fazenda.pr.gov.br/nfce/consulta';
 
 interface ExtractedResultState {
   data: NfceData;
@@ -70,55 +71,6 @@ export default function ConsumerScanScreen() {
     return () => loop.stop();
   }, [scanLineAnim]);
 
-  const executeDirectProcess = useCallback(async (parsed: ParsedNfce) => {
-    setIsProcessing(true);
-    try {
-      const response = await processMutation.mutateAsync({
-        accessKey: parsed.accessKey!,
-        qrCodeUrl:
-          parsed.qrCodeUrl ||
-          `https://sat.sef.sc.gov.br/nfce/qrcode?p=${parsed.accessKey}`,
-        issuerState: parsed.issuerState,
-        issuerCnpj: parsed.issuerCnpj,
-        issuedAt: new Date().toISOString(),
-        totalAmount: 100.0,
-      });
-
-      router.push({
-        pathname: '/(consumer)/invoice/[id]',
-        params: {
-          id: String(response.invoice.id),
-          pointsAwarded: String(response.pointsAwarded),
-          tradeName: response.establishment?.tradeName || 'Estabelecimento Parceiro',
-          accessKey: response.invoice.accessKey,
-          status: response.status,
-          rejectionReason: response.rejectionReason || '',
-        },
-      });
-    } catch (err: unknown) {
-      const maybeAxios = err as {
-        response?: { status?: number; data?: { code?: string; message?: string } };
-      };
-      const status = maybeAxios?.response?.status;
-      const code = maybeAxios?.response?.data?.code;
-
-      if (status === 409 || code === 'E_DUPLICATE_INVOICE') {
-        Alert.alert(
-          'Nota Fiscal Já Processada (RN02)',
-          'Esta NFC-e já foi pontuada anteriormente. Cada nota fiscal só pode conceder pontos uma única vez.'
-        );
-      } else {
-        Alert.alert(
-          'Erro ao Processar Nota',
-          extractApiErrorMessage(err, 'Ocorreu um erro ao enviar a nota para a SEFAZ ou ao computar os pontos.')
-        );
-      }
-    } finally {
-      setIsProcessing(false);
-      lastScannedCodeRef.current = null;
-    }
-  }, [processMutation, router]);
-
   const handleBarcodeScanned = async ({ data }: { data: string }) => {
     if (isProcessing) return;
     if (lastScannedCodeRef.current === data) return;
@@ -150,35 +102,24 @@ export default function ConsumerScanScreen() {
     }
 
     const isUrl = data.trim().startsWith('http://') || data.trim().startsWith('https://');
-
     if (isUrl) {
-      Alert.alert(
-        'NFC-e Detectada',
-        'Como deseja processar este cupom fiscal?',
-        [
-          {
-            text: 'Processar Pontos Direto',
-            onPress: () => executeDirectProcess(parsed),
-          },
-          {
-            text: '🌐 Abrir SEFAZ & Ver Itens',
-            onPress: () => {
-              setSefazModalUrl(data.trim());
-            },
-          },
-          {
-            text: 'Cancelar',
-            style: 'cancel',
-            onPress: () => {
-              lastScannedCodeRef.current = null;
-            },
-          },
-        ]
-      );
+      setSefazModalUrl(data.trim());
       return;
     }
 
-    await executeDirectProcess(parsed);
+    await Clipboard.setStringAsync(parsed.accessKey);
+    const portalUrl =
+      parsed.issuerState === 'PR' ? DEFAULT_SEFAZ_PR_URL : DEFAULT_SEFAZ_SC_URL;
+    Alert.alert(
+      'Chave Copiada',
+      `Chave ${parsed.issuerState} copiada para a área de transferência. Cole no portal da SEFAZ para extrair os valores reais da nota.`,
+      [
+        {
+          text: 'Abrir Portal SEFAZ',
+          onPress: () => setSefazModalUrl(portalUrl),
+        },
+      ]
+    );
   };
 
   const handleWebviewExtracted = async (data: NfceData, rawHtml: string) => {
@@ -341,16 +282,24 @@ export default function ConsumerScanScreen() {
         </View>
 
         <View className="gap-3 mb-4">
-          <TouchableOpacity
-            onPress={() => setSefazModalUrl(DEFAULT_SEFAZ_SC_URL)}
-            activeOpacity={0.7}
-            className="w-full py-4 items-center justify-center border border-neutros-borda bg-white rounded-2xl flex-row gap-2"
-          >
-            <Ionicons name="globe-outline" size={18} color="#008D4C" />
-            <Text className="text-neutros-texto font-bold text-sm">
-              Abrir Portal SEFAZ SC (WebView)
-            </Text>
-          </TouchableOpacity>
+          <View className="flex-row gap-2">
+            <TouchableOpacity
+              onPress={() => setSefazModalUrl(DEFAULT_SEFAZ_SC_URL)}
+              activeOpacity={0.7}
+              className="flex-1 py-4 items-center justify-center border border-neutros-borda bg-white rounded-2xl flex-row gap-1.5"
+            >
+              <Ionicons name="globe-outline" size={16} color="#008D4C" />
+              <Text className="text-neutros-texto font-bold text-xs">SEFAZ SC</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => setSefazModalUrl(DEFAULT_SEFAZ_PR_URL)}
+              activeOpacity={0.7}
+              className="flex-1 py-4 items-center justify-center border border-neutros-borda bg-white rounded-2xl flex-row gap-1.5"
+            >
+              <Ionicons name="globe-outline" size={16} color="#008D4C" />
+              <Text className="text-neutros-texto font-bold text-xs">SEFAZ PR</Text>
+            </TouchableOpacity>
+          </View>
 
           <TouchableOpacity
             onPress={() => router.push('/(consumer)/scan-manual')}
@@ -472,16 +421,24 @@ export default function ConsumerScanScreen() {
 
         {/* Rodapé: Botões de Ação Alternativos */}
         <View className="gap-3 items-center pb-2">
-          <TouchableOpacity
-            onPress={() => setSefazModalUrl(DEFAULT_SEFAZ_SC_URL)}
-            activeOpacity={0.8}
-            className="flex-row items-center gap-2 px-5 py-3 bg-white/95 rounded-2xl shadow-lg border border-white"
-          >
-            <Ionicons name="globe-outline" size={18} color="#008D4C" />
-            <Text className="text-sm font-bold text-neutros-texto">
-              🌐 Abrir Portal SEFAZ SC (WebView)
-            </Text>
-          </TouchableOpacity>
+          <View className="flex-row gap-2">
+            <TouchableOpacity
+              onPress={() => setSefazModalUrl(DEFAULT_SEFAZ_SC_URL)}
+              activeOpacity={0.8}
+              className="flex-row items-center gap-1.5 px-4 py-3 bg-white/95 rounded-2xl shadow-lg border border-white"
+            >
+              <Ionicons name="globe-outline" size={16} color="#008D4C" />
+              <Text className="text-xs font-bold text-neutros-texto">SEFAZ SC</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => setSefazModalUrl(DEFAULT_SEFAZ_PR_URL)}
+              activeOpacity={0.8}
+              className="flex-row items-center gap-1.5 px-4 py-3 bg-white/95 rounded-2xl shadow-lg border border-white"
+            >
+              <Ionicons name="globe-outline" size={16} color="#008D4C" />
+              <Text className="text-xs font-bold text-neutros-texto">SEFAZ PR</Text>
+            </TouchableOpacity>
+          </View>
 
           <TouchableOpacity
             onPress={() => router.push('/(consumer)/scan-manual')}

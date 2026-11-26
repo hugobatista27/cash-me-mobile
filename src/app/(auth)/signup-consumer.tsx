@@ -1,7 +1,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Link, useRouter } from 'expo-router';
-import React, { useState } from 'react';
-import { Controller, useForm } from 'react-hook-form';
+import React, { useEffect, useRef, useState } from 'react';
+import { Controller, FieldErrors, useForm } from 'react-hook-form';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -15,8 +15,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { z } from 'zod';
 
-import { extractApiErrorMessage } from '@/services/api';
-import { authService } from '@/services/auth';
+import { extractApiErrorMessage, extractApiFieldErrors } from '@/services/api';
+import { authService, SignupCustomerResponse } from '@/services/auth';
 import { useAuthStore } from '@/stores/use-auth-store';
 import { cleanDigits, formatCPF, formatPhone, isValidCPF } from '@/utils/validators';
 
@@ -24,18 +24,24 @@ const signupConsumerSchema = z
   .object({
     fullName: z
       .string()
+      .trim()
       .min(1, 'Nome completo é obrigatório')
-      .min(3, 'O nome deve ter pelo menos 3 caracteres'),
+      .min(3, 'O nome deve ter pelo menos 3 caracteres')
+      .max(255, 'O nome deve ter no máximo 255 caracteres'),
     email: z
       .string()
+      .trim()
       .min(1, 'E-mail é obrigatório')
+      .max(254, 'O e-mail deve ter no máximo 254 caracteres')
       .email('Formato de e-mail inválido'),
     cpf: z
       .string()
+      .trim()
       .min(1, 'CPF é obrigatório')
       .refine((val) => isValidCPF(val), { message: 'CPF inválido' }),
     phone: z
       .string()
+      .trim()
       .min(1, 'Telefone é obrigatório')
       .refine((val) => cleanDigits(val).length >= 10, {
         message: 'Telefone deve ter DDD + número (mínimo 10 dígitos)',
@@ -43,7 +49,8 @@ const signupConsumerSchema = z
     password: z
       .string()
       .min(1, 'Senha é obrigatória')
-      .min(8, 'A senha deve ter no mínimo 8 caracteres'),
+      .min(8, 'A senha deve ter no mínimo 8 caracteres')
+      .max(32, 'A senha deve ter no máximo 32 caracteres'),
     passwordConfirmation: z
       .string()
       .min(1, 'Confirmação de senha é obrigatória'),
@@ -60,14 +67,26 @@ const signupConsumerSchema = z
 
 type SignupConsumerFormData = z.infer<typeof signupConsumerSchema>;
 
+const CONSUMER_FIELD_LABELS: Record<keyof SignupConsumerFormData, string> = {
+  fullName: 'Nome Completo',
+  email: 'E-mail',
+  cpf: 'CPF',
+  phone: 'Telefone',
+  password: 'Senha',
+  passwordConfirmation: 'Confirmar Senha',
+  termsAccepted: 'Termos de Uso',
+};
+
 export default function SignupConsumerScreen() {
   const router = useRouter();
   const { setAuth } = useAuthStore();
+  const scrollViewRef = useRef<ScrollView>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const {
     control,
     handleSubmit,
+    setError,
     formState: { errors, isSubmitting },
   } = useForm<SignupConsumerFormData>({
     resolver: zodResolver(signupConsumerSchema),
@@ -82,40 +101,70 @@ export default function SignupConsumerScreen() {
     },
   });
 
+  useEffect(() => {
+    if (errorMessage) {
+      scrollViewRef.current?.scrollTo({ y: 0, animated: true });
+    }
+  }, [errorMessage]);
+
+  const onInvalid = (formErrors: FieldErrors<SignupConsumerFormData>) => {
+    const invalidLabels = (Object.keys(formErrors) as (keyof SignupConsumerFormData)[])
+      .map((key) => CONSUMER_FIELD_LABELS[key])
+      .filter(Boolean);
+    if (invalidLabels.length > 0) {
+      setErrorMessage(`Corrija os campos destacados: ${invalidLabels.join(', ')}.`);
+    }
+  };
+
   const onSubmit = async (data: SignupConsumerFormData) => {
     setErrorMessage(null);
+    let response: SignupCustomerResponse;
     try {
-      const response = await authService.signupCustomer({
+      response = await authService.signupCustomer({
         fullName: data.fullName.trim(),
-        email: data.email.trim(),
+        email: data.email.trim().toLowerCase(),
         password: data.password,
         passwordConfirmation: data.passwordConfirmation,
         cpf: cleanDigits(data.cpf),
         phone: cleanDigits(data.phone),
         termsAccepted: data.termsAccepted,
       });
+    } catch (err: unknown) {
+      const fieldErrors = extractApiFieldErrors(err);
+      for (const [field, message] of Object.entries(fieldErrors)) {
+        if (field in CONSUMER_FIELD_LABELS) {
+          setError(field as keyof SignupConsumerFormData, { message });
+        }
+      }
+      setErrorMessage(extractApiErrorMessage(err, 'Falha no cadastro. Verifique os dados informados.'));
+      return;
+    }
 
+    try {
       await setAuth({
         user: response.user,
         token: response.token,
         profile: response.profile,
       });
-
-      router.replace('/(consumer)/(tabs)');
-    } catch (err: unknown) {
-      setErrorMessage(extractApiErrorMessage(err, 'Falha no cadastro. Verifique os dados informados.'));
+    } catch {
+      setErrorMessage('Conta criada com sucesso, mas falhou ao salvar sessão local. Faça login.');
+      return;
     }
+
+    router.replace('/(consumer)/(tabs)');
   };
 
   return (
     <SafeAreaView className="flex-1 bg-neutros-fundo">
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         className="flex-1"
       >
         <ScrollView
+          ref={scrollViewRef}
           contentContainerClassName="grow px-6 py-6"
           keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
         >
           {/* Header */}
           <View className="mb-6">
@@ -320,12 +369,21 @@ export default function SignupConsumerScreen() {
               )}
             </View>
 
+            {/* Inline Error Banner near Submit */}
+            {errorMessage && (
+              <View className="mb-4 p-3.5 bg-red-50 border border-red-200 rounded-2xl">
+                <Text className="text-xs text-red-700 font-semibold text-center">
+                  {errorMessage}
+                </Text>
+              </View>
+            )}
+
             {/* Submit Button */}
             <TouchableOpacity
-              onPress={handleSubmit(onSubmit)}
+              onPress={handleSubmit(onSubmit, onInvalid)}
               disabled={isSubmitting}
               activeOpacity={0.8}
-              className="w-full h-13 bg-consumidor rounded-2xl items-center justify-center shadow-sm"
+              className="w-full h-14 bg-consumidor rounded-2xl items-center justify-center shadow-sm"
             >
               {isSubmitting ? (
                 <ActivityIndicator color="#FFFFFF" />

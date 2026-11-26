@@ -71,19 +71,108 @@ apiClient.interceptors.response.use(
 );
 
 /**
- * Extrai mensagem de erro legível de respostas da API AdonisJS/VineJS (`message` ou `errors[0].message`).
+ * Extrai mapa de erros por campo de respostas 422 do AdonisJS/VineJS.
  */
-export const extractApiErrorMessage = (err: unknown, fallback: string): string => {
+export const extractApiFieldErrors = (err: unknown): Record<string, string> => {
   const maybeAxios = err as {
     response?: {
       data?: {
-        message?: string;
-        errors?: { message?: string }[];
+        errors?: { field?: string; message?: string }[];
       };
     };
   };
-  const data = maybeAxios?.response?.data;
-  return data?.message || data?.errors?.[0]?.message || fallback;
+  const errors = maybeAxios?.response?.data?.errors;
+  if (!Array.isArray(errors)) return {};
+
+  const result: Record<string, string> = {};
+  for (const item of errors) {
+    if (item?.field && item?.message && !result[item.field]) {
+      result[item.field] = item.message;
+    }
+  }
+  return result;
+};
+
+/**
+ * Extrai mensagem de erro esclarecedora de erros Axios (rede, timeout, 4xx, 5xx) ou erros locais.
+ */
+export const extractApiErrorMessage = (err: unknown, fallback: string): string => {
+  const maybeAxios = err as {
+    isAxiosError?: boolean;
+    code?: string;
+    message?: string;
+    response?: {
+      status?: number;
+      data?: {
+        code?: string;
+        message?: string;
+        errors?: { field?: string; message?: string }[];
+      } | string;
+    };
+  };
+
+  if (!maybeAxios?.response) {
+    if (maybeAxios?.code === 'ECONNABORTED' || maybeAxios?.code === 'ETIMEDOUT') {
+      return 'Tempo limite excedido ao conectar ao servidor. Verifique sua conexão e tente novamente.';
+    }
+
+    if (
+      maybeAxios?.isAxiosError ||
+      maybeAxios?.code === 'ERR_NETWORK' ||
+      maybeAxios?.message === 'Network Error'
+    ) {
+      const devHint =
+        typeof __DEV__ !== 'undefined' && __DEV__ ? ` (${API_BASE_URL})` : '';
+      return `Não foi possível conectar ao servidor${devHint}. Verifique sua internet e se a API está em execução.`;
+    }
+
+    if (err instanceof Error && err.message) {
+      return err.message;
+    }
+
+    return fallback;
+  }
+
+  const status = maybeAxios.response.status ?? 0;
+  const rawData = maybeAxios.response.data;
+
+  if (typeof rawData === 'string') {
+    if (status >= 500) {
+      return `Erro interno no servidor (HTTP ${status}). Tente novamente em instantes.`;
+    }
+    return fallback;
+  }
+
+  const data = rawData;
+  if (data?.code === 'E_INVALID_CREDENTIALS') {
+    return 'E-mail ou senha incorretos.';
+  }
+
+  if (Array.isArray(data?.errors) && data.errors.length > 0) {
+    const messages = data.errors
+      .map((item) => item?.message?.trim())
+      .filter((msg): msg is string => Boolean(msg))
+      .map((msg) =>
+        msg === 'Invalid user credentials' ? 'E-mail ou senha incorretos.' : msg
+      );
+    const unique = Array.from(new Set(messages));
+    if (unique.length > 0) {
+      return unique.join('\n');
+    }
+  }
+
+  if (data?.message) {
+    if (data.message === 'Invalid user credentials') {
+      return 'E-mail ou senha incorretos.';
+    }
+    return data.message;
+  }
+
+  if (status >= 500) {
+    return `Erro interno no servidor (HTTP ${status}). Tente novamente em instantes.`;
+  }
+
+  return fallback;
 };
 
 /**

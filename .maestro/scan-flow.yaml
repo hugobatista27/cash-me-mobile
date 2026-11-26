@@ -1,24 +1,48 @@
 appId: host.exp.exponent
 ---
 # ==============================================================================
-# Suíte de Testes E2E Maestro - TASK-03: Leitura de QR Code e Processamento de NFC-e
-# 1. Autenticação Real do Consumidor (ou reaproveitamento de sessão ativa)
+# Suíte de Testes E2E Maestro - TASK-03: Leitura de QR Code e Entrada Manual NFC-e
+# 1. Autenticação Real do Consumidor
 # 2. Navegação para a Aba Escanear (Viewfinder & Controles)
-# 3. Teste de Abertura do Portal SEFAZ SC (WebView com CAPTCHA)
+# 3. Teste de Abertura do Portal SEFAZ SC via WebView Modal
 # 4. Navegação para Entrada Manual da Chave de 44 Dígitos (scan-manual.tsx)
 # 5. Validação de Estado Não Homologado - RN07 (Ex: SP código 35)
-# 6. Validação de Nota Duplicada - RN02 (E_DUPLICATE_INVOICE)
-# 7. Fluxo Feliz: Processamento de Nova NFC-e Válida de SC com Lojista Ativo
-# 8. Validação do Comprovante de Pontos (invoice/[id].tsx) e Retorno à Home
-# 9. Logout para Higienização do Estado
+# 6. Handoff seguro para SEFAZ com chave SC válida (sem bypass de CAPTCHA)
+# 7. Logout para Higienização do Estado
 # ==============================================================================
 
-# Se estiver na tela de digitação manual de execução anterior, volta para tabs
+# 0. Normaliza estado inicial
+- runFlow:
+    when:
+      visible: "Fast Refresh"
+    commands:
+      - back
+
 - runFlow:
     when:
       visible: "Chave da NFC-e"
     commands:
       - tapOn: "Voltar"
+
+- runFlow:
+    when:
+      visible: "← Voltar para login"
+    commands:
+      - tapOn: "← Voltar para login"
+
+- runFlow:
+    when:
+      visible: "Painel do Estabelecimento"
+    commands:
+      - tapOn: "Perfil Loja"
+      - extendedWaitUntil:
+          visible: "Encerrar Sessão"
+          timeout: 10000
+      - tapOn: "Encerrar Sessão"
+      - extendedWaitUntil:
+          visible: "Sair"
+          timeout: 5000
+      - tapOn: "Sair"
 
 # ------------------------------------------------------------------------------
 # PARTE 1: LOGIN DO CONSUMIDOR (CASO ESTEJA NA TELA DE LOGIN)
@@ -27,13 +51,20 @@ appId: host.exp.exponent
     when:
       visible: "Bem-vindo ao CashMe"
     commands:
+      - tapOn: "Criar conta Consumidor"
+      - extendedWaitUntil:
+          visible: "← Voltar para login"
+          timeout: 5000
+      - tapOn: "← Voltar para login"
+      - extendedWaitUntil:
+          visible: "Bem-vindo ao CashMe"
+          timeout: 5000
+
       - tapOn: "seu.email@exemplo.com"
-      - eraseText: 50
       - inputText: "cliente.live3@cashme.com"
       - hideKeyboard
 
       - tapOn: "Sua senha secreta"
-      - eraseText: 50
       - inputText: "password123"
       - hideKeyboard
 
@@ -41,14 +72,13 @@ appId: host.exp.exponent
 
       - extendedWaitUntil:
           visible: "Área do Consumidor"
-          timeout: 10000
+          timeout: 15000
 
 # ------------------------------------------------------------------------------
 # PARTE 2: NAVEGAÇÃO PARA A TELA DE ESCANEAMENTO
 # ------------------------------------------------------------------------------
 - tapOn: "Escanear"
 
-# Tratamento para permissão de câmera se solicitada pelo app ou Expo Go
 - runFlow:
     when:
       visible: "Permitir Acesso à Câmera"
@@ -67,40 +97,35 @@ appId: host.exp.exponent
     commands:
       - tapOn: "While using the app"
 
-# Aguarda a tela de escaneamento estar pronta
 - extendedWaitUntil:
-    visible: "Digitar Chave de 44 Dígitos"
+    visible: "Digitar Chave.*"
     timeout: 10000
 
-- assertVisible: "Escanear QR Code"
-- assertVisible: "Aponte a câmera para o QR Code impresso no cupom fiscal (SC ou PR - RN07)."
+- assertVisible: "SEFAZ SC"
+- assertVisible: "SEFAZ PR"
 
-# Testa alternância de lanterna
-- tapOn: "Alternar Lanterna"
+# Verifica botão de lanterna (em Expo Go o ícone flutuante do dev-menu pode sobrepor o toque)
+- assertVisible: "Alternar Lanterna"
 
 # ------------------------------------------------------------------------------
 # PARTE 3: MODAL DO PORTAL SEFAZ SC VIA WEBVIEW
 # ------------------------------------------------------------------------------
-- tapOn:
-    text: ".*Abrir Portal SEFAZ.*"
+- tapOn: "SEFAZ SC"
 
 - extendedWaitUntil:
     visible: "Portal SEFAZ"
     timeout: 10000
 
-- assertVisible: "Portal SEFAZ"
-
-# Fecha o modal WebView e retorna ao scanner
 - tapOn: "Voltar"
 
 - extendedWaitUntil:
-    visible: "Digitar Chave de 44 Dígitos"
+    visible: "Digitar Chave.*"
     timeout: 10000
 
 # ------------------------------------------------------------------------------
 # PARTE 4: ENTRADA MANUAL DA CHAVE DE ACESSO
 # ------------------------------------------------------------------------------
-- tapOn: "Digitar Chave de 44 Dígitos"
+- tapOn: "Digitar Chave.*"
 
 - extendedWaitUntil:
     visible: "Entrada Manual"
@@ -108,19 +133,20 @@ appId: host.exp.exponent
 
 - assertVisible: "Chave da NFC-e"
 - assertVisible: "Localize os 44 dígitos"
-- assertVisible: "Processar e Ganhar Pontos"
+- assertVisible: "Consultar na SEFAZ e Pontuar"
+- assertVisible: "Portal SEFAZ SC"
+- assertVisible: "Portal SEFAZ PR"
 
 # ------------------------------------------------------------------------------
 # PARTE 5: VALIDAÇÃO LOCAL DE ESTADO NÃO HOMOLOGADO (RN07)
 # ------------------------------------------------------------------------------
 - tapOn:
     below: "Chave de Acesso (44 Dígitos)"
-- eraseText: 60
 - inputText: "35261050401244000154650010000000011123456789"
 - hideKeyboard
 
 - assertVisible: "44/44"
-- tapOn: "Processar e Ganhar Pontos"
+- tapOn: "Consultar na SEFAZ e Pontuar"
 
 - extendedWaitUntil:
     visible: "Chave Não Homologada (RN07)"
@@ -130,80 +156,66 @@ appId: host.exp.exponent
 - tapOn: "OK"
 
 # ------------------------------------------------------------------------------
-# PARTE 6: VALIDAÇÃO DE NOTA DUPLICADA (RN02)
+# PARTE 6: HANDOFF SEGURO PARA SEFAZ COM CHAVE SC VÁLIDA
 # ------------------------------------------------------------------------------
-- tapOn:
-    below: "Chave de Acesso (44 Dígitos)"
-- eraseText: 60
-- inputText: "42230950401244000154650010000001231000001234"
-- hideKeyboard
-
-- assertVisible: "44/44"
-- tapOn: "Processar e Ganhar Pontos"
-
+- tapOn: "Voltar"
+- runFlow:
+    when:
+      visible: "Área do Consumidor"
+    commands:
+      - tapOn: "Escanear"
 - extendedWaitUntil:
-    visible: "Nota Fiscal Já Processada (RN02)"
+    visible: "Digitar Chave.*"
+    timeout: 10000
+- tapOn: "Digitar Chave.*"
+- extendedWaitUntil:
+    visible: "Entrada Manual"
     timeout: 10000
 
-- assertVisible: "Esta NFC-e já foi pontuada anteriormente. Cada nota fiscal só pode conceder pontos uma única vez."
-- tapOn: "OK"
-
-# ------------------------------------------------------------------------------
-# PARTE 7: FLUXO FELIZ - PROCESSAMENTO DE NOVA NFC-E COM PONTUAÇÃO
-# ------------------------------------------------------------------------------
 - tapOn:
     below: "Chave de Acesso (44 Dígitos)"
-- eraseText: 60
-
-# Gera chave de 44 dígitos única para SC (42) no período 2610 e CNPJ 50401244000154 (Padaria Central E2E)
-- evalScript: ${output.uniqueKey = "4226105040124400015465001" + String(Date.now()).slice(-9) + "1234567890".slice(0, 10)}
-
-- inputText: ${output.uniqueKey}
+- inputText: "42261050401244000154650010000000011123456789"
 - hideKeyboard
 
 - assertVisible: "44/44"
-- tapOn: "Processar e Ganhar Pontos"
+- tapOn: "Consultar na SEFAZ e Pontuar"
 
-# ------------------------------------------------------------------------------
-# PARTE 8: COMPROVANTE DE PONTOS CREDITADOS E RETORNO À HOME
-# ------------------------------------------------------------------------------
 - extendedWaitUntil:
-    visible: "Comprovante"
-    timeout: 15000
+    visible: "Chave Copiada"
+    timeout: 5000
+- tapOn: "Abrir Portal SEFAZ"
 
-- assertVisible: "NFC-e Processada"
-- assertVisible: "Pontos Creditados"
-- assertVisible: "Padaria Central E2E"
-- assertVisible: "Informações da Nota Fiscal"
-- assertVisible: "Voltar para o Início"
+- extendedWaitUntil:
+    visible: "Portal SEFAZ"
+    timeout: 10000
 
-- tapOn: "Voltar para o Início"
+- tapOn: "Voltar"
+- extendedWaitUntil:
+    visible: "Entrada Manual"
+    timeout: 10000
+
+- tapOn: "Voltar"
+
+# Volta para a Home e realiza Logout
+- runFlow:
+    when:
+      visible: "Fechar"
+    commands:
+      - tapOn: "Fechar"
 
 - extendedWaitUntil:
     visible: "Área do Consumidor"
     timeout: 10000
 
-- assertVisible: "Início"
-- assertVisible: "Carteira"
-- assertVisible: "Escanear"
-
-# ------------------------------------------------------------------------------
-# PARTE 9: LOGOUT PARA HIGIENIZAÇÃO DO AMBIENTE
-# ------------------------------------------------------------------------------
 - tapOn: "Perfil"
-
 - extendedWaitUntil:
     visible: "Encerrar Sessão"
     timeout: 10000
-
 - tapOn: "Encerrar Sessão"
-
 - extendedWaitUntil:
     visible: "Sair"
     timeout: 5000
-
 - tapOn: "Sair"
-
 - extendedWaitUntil:
     visible: "Bem-vindo ao CashMe"
     timeout: 10000

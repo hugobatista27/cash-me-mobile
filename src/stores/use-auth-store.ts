@@ -72,18 +72,48 @@ export const useAuthStore = create<AuthState>((set) => ({
   isRestoringSession: true,
 
   setAuth: async (payload) => {
+    const compactProfile = payload.profile
+      ? 'role' in payload.profile
+        ? {
+            id: payload.profile.id,
+            fullName: payload.profile.fullName,
+            role: payload.profile.role,
+          }
+        : {
+            id: payload.profile.id,
+            fullName: payload.profile.fullName,
+            cpf: payload.profile.cpf,
+            phone: payload.profile.phone,
+          }
+      : null;
+
+    const compactEstablishment = payload.establishment
+      ? {
+          id: payload.establishment.id,
+          cnpj: payload.establishment.cnpj,
+          tradeName: payload.establishment.tradeName,
+          status: payload.establishment.status,
+          legalName: payload.establishment.legalName,
+        }
+      : null;
+
     await saveAuthToken(payload.token);
     await saveSessionData({
-      user: payload.user,
-      profile: payload.profile ?? null,
-      establishment: payload.establishment ?? null,
+      user: {
+        id: payload.user.id,
+        email: payload.user.email,
+        userType: payload.user.userType,
+        status: payload.user.status,
+      },
+      profile: compactProfile,
+      establishment: compactEstablishment,
     });
 
     set({
       user: payload.user,
       token: payload.token,
-      profile: payload.profile ?? null,
-      establishment: payload.establishment ?? null,
+      profile: compactProfile,
+      establishment: compactEstablishment,
       isAuthenticated: true,
       isRestoringSession: false,
     });
