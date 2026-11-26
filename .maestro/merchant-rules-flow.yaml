@@ -2,7 +2,7 @@ appId: host.exp.exponent
 ---
 # ==============================================================================
 # Suíte de Testes E2E Maestro - TASK-06: Interface do Lojista (Regras & Simulador)
-# 1. Autenticação Real do Lojista (ou reaproveitamento de sessão ativa)
+# 1. Cadastro de Lojista novo (garante v1 inicial e estado limpo)
 # 2. Validação da Regra Ativa Vigente (Card com resumo humano)
 # 3. Simulação em Tempo Real com Debounce
 # 4. Navegação e Auditoria de Histórico de Regras (RN04)
@@ -11,14 +11,19 @@ appId: host.exp.exponent
 # 7. Logout para Higienização do Estado
 # ==============================================================================
 
-# Se estiver na tela de histórico de regras de execução anterior, volta para tabs
+# 0. Normaliza estado inicial
 - runFlow:
     when:
       visible: "Histórico de Regras"
     commands:
       - tapOn: "Voltar"
 
-# Se estiver na tela de consumidor logado por engano, desloga primeiro
+- runFlow:
+    when:
+      visible: "← Voltar para login"
+    commands:
+      - tapOn: "← Voltar para login"
+
 - runFlow:
     when:
       visible: "Área do Consumidor"
@@ -33,28 +38,124 @@ appId: host.exp.exponent
           timeout: 5000
       - tapOn: "Sair"
 
-# ------------------------------------------------------------------------------
-# PARTE 1: LOGIN DO LOJISTA (CASO ESTEJA NA TELA DE LOGIN)
-# ------------------------------------------------------------------------------
 - runFlow:
     when:
-      visible: "Bem-vindo ao CashMe"
+      visible: "Painel do Estabelecimento"
     commands:
-      - tapOn: "seu.email@exemplo.com"
-      - eraseText: 50
-      - inputText: "lojista.live3@cashme.com"
-      - hideKeyboard
-
-      - tapOn: "Sua senha secreta"
-      - eraseText: 50
-      - inputText: "password123"
-      - hideKeyboard
-
-      - tapOn: "Entrar"
-
+      - tapOn: "Perfil Loja"
       - extendedWaitUntil:
-          visible: "Painel do Estabelecimento"
-          timeout: 15000
+          visible: "Encerrar Sessão"
+          timeout: 10000
+      - tapOn: "Encerrar Sessão"
+      - extendedWaitUntil:
+          visible: "Sair"
+          timeout: 5000
+      - tapOn: "Sair"
+
+- extendedWaitUntil:
+    visible: "Bem-vindo ao CashMe"
+    timeout: 15000
+
+# ------------------------------------------------------------------------------
+# PARTE 1: ONBOARDING DE LOJISTA NOVO (GARANTE REGRA v1 INICIAL)
+# ------------------------------------------------------------------------------
+- evalScript: ${var ts=Date.now(); function gCnpj(seed){var x=seed%1000000007, b=[]; for(var i=0;i<8;i++){x=(x*1103515245+12345)%2147483647; b.push(x%10);} b.push(0,0,0,1); var w1=[5,4,3,2,9,8,7,6,5,4,3,2], s1=0; for(var j=0;j<12;j++)s1+=b[j]*w1[j]; var r1=s1%11; b.push(r1<2?0:11-r1); var w2=[6,5,4,3,2,9,8,7,6,5,4,3,2], s2=0; for(var k=0;k<13;k++)s2+=b[k]*w2[k]; var r2=s2%11; b.push(r2<2?0:11-r2); return b.join('');} output.cnpj=gCnpj(ts+3571); output.email='rules.m.'+ts+'@cashme.test';}
+
+- tapOn: "Cadastrar Lojista"
+- extendedWaitUntil:
+    visible: "Onboarding do Comércio"
+    timeout: 5000
+
+- tapOn: "Ex: Carlos Eduardo"
+- inputText: "Gestor Regras"
+- hideKeyboard
+
+- tapOn: "contato@minhaloja.com"
+- inputText: ${output.email}
+- hideKeyboard
+
+- scrollUntilVisible:
+    element: "Confirmar Senha"
+    direction: DOWN
+    timeout: 10000
+
+- tapOn: "Mínimo 8 caracteres"
+- inputText: "password123"
+- hideKeyboard
+
+- tapOn: "Repita sua senha"
+- inputText: "password123"
+- hideKeyboard
+
+- scrollUntilVisible:
+    element: "CNPJ"
+    direction: DOWN
+    timeout: 10000
+
+- tapOn: "00.000.000/0000-00"
+- inputText: ${output.cnpj}
+- hideKeyboard
+
+- tapOn: "Ex: Comercial de Alimentos Ltda"
+- inputText: "Mercado Regras Ltda"
+- hideKeyboard
+
+- tapOn: "Ex: Supermercado Central"
+- inputText: "Mercado Regras"
+- hideKeyboard
+
+- tapOn: "(00) 0000-0000"
+- inputText: "4833334444"
+- hideKeyboard
+
+- scrollUntilVisible:
+    element: "CEP"
+    direction: DOWN
+    timeout: 10000
+
+- tapOn: "00000-000"
+- inputText: "88010000"
+- hideKeyboard
+
+- tapOn: "Ex: Av. Brasil"
+- inputText: "Rua Felipe Schmidt"
+- hideKeyboard
+
+- tapOn: "123"
+- inputText: "100"
+- hideKeyboard
+
+- scrollUntilVisible:
+    element: "Cadastrar Comércio"
+    direction: DOWN
+    speed: 60
+    visibilityPercentage: 50
+    timeout: 10000
+
+- tapOn: "Centro"
+- inputText: "Centro"
+- hideKeyboard
+
+- tapOn: "São Paulo"
+- inputText: "Florianópolis"
+- hideKeyboard
+
+- tapOn: "SP"
+- inputText: "SC"
+- hideKeyboard
+
+- scrollUntilVisible:
+    element: "Cadastrar Comércio"
+    direction: DOWN
+    speed: 60
+    visibilityPercentage: 50
+    timeout: 10000
+
+- tapOn: "Cadastrar Comércio"
+
+- extendedWaitUntil:
+    visible: "Painel do Estabelecimento"
+    timeout: 15000
 
 # ------------------------------------------------------------------------------
 # PARTE 2: NAVEGAÇÃO PARA A TELA DE REGRAS E VALIDAÇÃO DA REGRA ATIVA
@@ -65,7 +166,7 @@ appId: host.exp.exponent
     visible: "Regras e Simulador"
     timeout: 10000
 
-- assertVisible: "POLÍTICAS DE FIDELIDADE"
+- assertVisible: "Políticas de Fidelidade"
 - assertVisible: "Regra Ativa Oficial"
 - assertVisible: "v1"
 
@@ -94,9 +195,7 @@ appId: host.exp.exponent
 - assertVisible: "Versão 1"
 - assertVisible: "Ativa"
 
-# Retorna para a tela de Regras tocando no botão Voltar
 - tapOn: "Voltar"
-
 - extendedWaitUntil:
     visible: "Regras e Simulador"
     timeout: 5000
@@ -104,31 +203,37 @@ appId: host.exp.exponent
 # ------------------------------------------------------------------------------
 # PARTE 5: PUBLICAÇÃO E VERSIONAMENTO DE NOVA REGRA (v2)
 # ------------------------------------------------------------------------------
-- scroll
+- scrollUntilVisible:
+    element: "Publicar Nova Regra (v2)"
+    direction: DOWN
+    speed: 60
+    visibilityPercentage: 50
+    timeout: 10000
 
-# Edita o nome da regra
 - tapOn:
     below: "Nome ou Descrição da Regra"
 - eraseText: 50
 - inputText: "Fidelidade R$ 5"
 - hideKeyboard
 
-# Edita a base monetária para 5
 - tapOn:
     below: "A cada R$ (Base)"
 - eraseText: 10
 - inputText: "5"
 - hideKeyboard
 
-- scroll
+- scrollUntilVisible:
+    element: "Publicar Nova Regra (v2)"
+    direction: DOWN
+    speed: 60
+    visibilityPercentage: 50
+    timeout: 10000
 
-# Toca no botão de Publicar Nova Regra
 - tapOn: "Publicar Nova Regra (v2)"
 
 - extendedWaitUntil:
     visible: "OK"
     timeout: 10000
-
 - tapOn: "OK"
 
 # ------------------------------------------------------------------------------
@@ -142,7 +247,6 @@ appId: host.exp.exponent
 - assertVisible: ".*Fidelidade R\\$ 5.*"
 - assertVisible: "v2"
 
-# Valida no Histórico a existência de v2 (Ativa) e v1 (Inativa)
 - tapOn: "Histórico"
 - extendedWaitUntil:
     visible: "Versão 2"
@@ -151,9 +255,7 @@ appId: host.exp.exponent
 - assertVisible: "Versão 1"
 - assertVisible: "Inativa"
 
-# Retorna para a tela de regras
 - tapOn: "Voltar"
-
 - extendedWaitUntil:
     visible: "Regras e Simulador"
     timeout: 5000
@@ -162,19 +264,14 @@ appId: host.exp.exponent
 # PARTE 7: LOGOUT PARA HIGIENIZAÇÃO DO ESTADO
 # ------------------------------------------------------------------------------
 - tapOn: "Perfil Loja"
-
 - extendedWaitUntil:
     visible: "Encerrar Sessão"
     timeout: 10000
-
 - tapOn: "Encerrar Sessão"
-
 - extendedWaitUntil:
     visible: "Sair"
     timeout: 5000
-
 - tapOn: "Sair"
-
 - extendedWaitUntil:
     visible: "Bem-vindo ao CashMe"
     timeout: 10000

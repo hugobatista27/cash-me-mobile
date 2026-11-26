@@ -19,8 +19,12 @@ export default function ConsumerLayout() {
     return <Redirect href="/(auth)/login" />;
   }
 
-  if (user?.userType !== 'CUSTOMER') {
+  if (user?.userType === 'ESTABLISHMENT') {
     return <Redirect href="/(merchant)/(tabs)" />;
+  }
+
+  if (user?.userType !== 'CUSTOMER') {
+    return <Redirect href="/(auth)/login" />;
   }
 
   return <Slot />;

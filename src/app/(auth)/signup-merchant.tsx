@@ -1,7 +1,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Link, useRouter } from 'expo-router';
-import React, { useState } from 'react';
-import { Controller, useForm } from 'react-hook-form';
+import React, { useEffect, useRef, useState } from 'react';
+import { Controller, FieldErrors, useForm } from 'react-hook-form';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -15,7 +15,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { z } from 'zod';
 
-import { authService } from '@/services/auth';
+import { extractApiErrorMessage, extractApiFieldErrors } from '@/services/api';
+import { authService, RegisterEstablishmentResponse } from '@/services/auth';
 import { useAuthStore } from '@/stores/use-auth-store';
 import {
   cleanDigits,
@@ -30,16 +31,21 @@ const signupMerchantSchema = z
     // Dados do Gestor
     managerName: z
       .string()
+      .trim()
       .min(1, 'Nome do gestor é obrigatório')
-      .min(3, 'O nome deve ter pelo menos 3 caracteres'),
+      .min(3, 'O nome deve ter pelo menos 3 caracteres')
+      .max(255, 'O nome deve ter no máximo 255 caracteres'),
     email: z
       .string()
+      .trim()
       .min(1, 'E-mail corporativo é obrigatório')
+      .max(254, 'O e-mail deve ter no máximo 254 caracteres')
       .email('Formato de e-mail inválido'),
     password: z
       .string()
       .min(1, 'Senha é obrigatória')
-      .min(8, 'A senha deve ter no mínimo 8 caracteres'),
+      .min(8, 'A senha deve ter no mínimo 8 caracteres')
+      .max(32, 'A senha deve ter no máximo 32 caracteres'),
     passwordConfirmation: z
       .string()
       .min(1, 'Confirmação de senha é obrigatória'),
@@ -47,18 +53,24 @@ const signupMerchantSchema = z
     // Dados da Empresa
     cnpj: z
       .string()
+      .trim()
       .min(1, 'CNPJ é obrigatório')
       .refine((val) => isValidCNPJ(val), { message: 'CNPJ inválido' }),
     legalName: z
       .string()
+      .trim()
       .min(1, 'Razão Social é obrigatória')
-      .min(2, 'Razão social muito curta'),
+      .min(2, 'Razão social muito curta')
+      .max(255, 'Razão social deve ter no máximo 255 caracteres'),
     tradeName: z
       .string()
+      .trim()
       .min(1, 'Nome Fantasia é obrigatório')
-      .min(2, 'Nome fantasia muito curto'),
+      .min(2, 'Nome fantasia muito curto')
+      .max(255, 'Nome fantasia deve ter no máximo 255 caracteres'),
     phone: z
       .string()
+      .trim()
       .min(1, 'Telefone de contato é obrigatório')
       .refine((val) => cleanDigits(val).length >= 10, {
         message: 'DDD + número (mínimo 10 dígitos)',
@@ -67,18 +79,20 @@ const signupMerchantSchema = z
     // Endereço
     postalCode: z
       .string()
+      .trim()
       .min(1, 'CEP é obrigatório')
       .refine((val) => cleanDigits(val).length === 8, {
         message: 'CEP deve ter 8 dígitos',
       }),
-    street: z.string().min(1, 'Logradouro é obrigatório'),
-    number: z.string().min(1, 'Número é obrigatório'),
-    neighborhood: z.string().min(1, 'Bairro é obrigatório'),
-    city: z.string().min(1, 'Cidade é obrigatória'),
+    street: z.string().trim().min(1, 'Logradouro é obrigatório').max(255),
+    number: z.string().trim().min(1, 'Número é obrigatório').max(20),
+    neighborhood: z.string().trim().min(1, 'Bairro é obrigatório').max(100),
+    city: z.string().trim().min(1, 'Cidade é obrigatória').max(100),
     state: z
       .string()
+      .trim()
       .min(1, 'UF é obrigatório')
-      .length(2, 'UF deve ter 2 letras (ex: SP, SC)'),
+      .length(2, 'UF deve ter 2 letras (ex: SC, PR)'),
   })
   .refine((data) => data.password === data.passwordConfirmation, {
     message: 'As senhas não coincidem',
@@ -87,14 +101,50 @@ const signupMerchantSchema = z
 
 type SignupMerchantFormData = z.infer<typeof signupMerchantSchema>;
 
+const MERCHANT_FIELD_LABELS: Record<keyof SignupMerchantFormData, string> = {
+  managerName: 'Nome do Gestor',
+  email: 'E-mail Corporativo',
+  password: 'Senha',
+  passwordConfirmation: 'Confirmar Senha',
+  cnpj: 'CNPJ',
+  legalName: 'Razão Social',
+  tradeName: 'Nome Fantasia',
+  phone: 'Telefone Comercial',
+  postalCode: 'CEP',
+  street: 'Rua/Avenida',
+  number: 'Número',
+  neighborhood: 'Bairro',
+  city: 'Cidade',
+  state: 'UF',
+};
+
+const API_TO_FORM_FIELD: Record<string, keyof SignupMerchantFormData> = {
+  'user.fullName': 'managerName',
+  'user.email': 'email',
+  'user.password': 'password',
+  'user.passwordConfirmation': 'passwordConfirmation',
+  'establishment.cnpj': 'cnpj',
+  'establishment.legalName': 'legalName',
+  'establishment.tradeName': 'tradeName',
+  'establishment.contact.phone': 'phone',
+  'address.postalCode': 'postalCode',
+  'address.street': 'street',
+  'address.number': 'number',
+  'address.neighborhood': 'neighborhood',
+  'address.city': 'city',
+  'address.state': 'state',
+};
+
 export default function SignupMerchantScreen() {
   const router = useRouter();
   const { setAuth } = useAuthStore();
+  const scrollViewRef = useRef<ScrollView>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const {
     control,
     handleSubmit,
+    setError,
     formState: { errors, isSubmitting },
   } = useForm<SignupMerchantFormData>({
     resolver: zodResolver(signupMerchantSchema),
@@ -116,13 +166,30 @@ export default function SignupMerchantScreen() {
     },
   });
 
+  useEffect(() => {
+    if (errorMessage) {
+      scrollViewRef.current?.scrollTo({ y: 0, animated: true });
+    }
+  }, [errorMessage]);
+
+  const onInvalid = (formErrors: FieldErrors<SignupMerchantFormData>) => {
+    const invalidLabels = (Object.keys(formErrors) as (keyof SignupMerchantFormData)[])
+      .map((key) => MERCHANT_FIELD_LABELS[key])
+      .filter(Boolean);
+    if (invalidLabels.length > 0) {
+      setErrorMessage(`Corrija os campos destacados: ${invalidLabels.join(', ')}.`);
+    }
+  };
+
   const onSubmit = async (data: SignupMerchantFormData) => {
     setErrorMessage(null);
+    const normalizedEmail = data.email.trim().toLowerCase();
+    let response: RegisterEstablishmentResponse;
     try {
-      const response = await authService.registerEstablishment({
+      response = await authService.registerEstablishment({
         user: {
           fullName: data.managerName.trim(),
-          email: data.email.trim(),
+          email: normalizedEmail,
           password: data.password,
           passwordConfirmation: data.passwordConfirmation,
         },
@@ -132,7 +199,7 @@ export default function SignupMerchantScreen() {
           tradeName: data.tradeName.trim(),
           contact: {
             phone: cleanDigits(data.phone),
-            email: data.email.trim(),
+            email: normalizedEmail,
           },
         },
         address: {
@@ -144,33 +211,46 @@ export default function SignupMerchantScreen() {
           state: data.state.trim().toUpperCase(),
         },
       });
+    } catch (err: unknown) {
+      const fieldErrors = extractApiFieldErrors(err);
+      for (const [apiField, message] of Object.entries(fieldErrors)) {
+        const mapped = API_TO_FORM_FIELD[apiField];
+        if (mapped) {
+          setError(mapped, { message });
+        }
+      }
+      setErrorMessage(
+        extractApiErrorMessage(err, 'Falha no cadastro do estabelecimento. Verifique os dados informados.')
+      );
+      return;
+    }
 
+    try {
       await setAuth({
         user: response.user,
         token: response.token,
         profile: response.profile,
         establishment: response.establishment,
       });
-
-      router.replace('/(merchant)/(tabs)');
-    } catch (err: unknown) {
-      const maybeAxios = err as { response?: { data?: { message?: string } } };
-      const msg =
-        maybeAxios?.response?.data?.message ||
-        'Falha no cadastro do estabelecimento. Verifique os dados informados.';
-      setErrorMessage(msg);
+    } catch {
+      setErrorMessage('Comércio cadastrado com sucesso, mas falhou ao salvar sessão local. Faça login.');
+      return;
     }
+
+    router.replace('/(merchant)/(tabs)');
   };
 
   return (
     <SafeAreaView className="flex-1 bg-neutros-fundo">
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         className="flex-1"
       >
         <ScrollView
+          ref={scrollViewRef}
           contentContainerClassName="grow px-6 py-6"
           keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
         >
           {/* Header */}
           <View className="mb-6">
@@ -537,12 +617,21 @@ export default function SignupMerchantScreen() {
               </View>
             </View>
 
+            {/* Inline Error Banner near Submit */}
+            {errorMessage && (
+              <View className="mt-2 p-3.5 bg-red-50 border border-red-200 rounded-2xl">
+                <Text className="text-xs text-red-700 font-semibold text-center">
+                  {errorMessage}
+                </Text>
+              </View>
+            )}
+
             {/* Submit Button */}
             <TouchableOpacity
-              onPress={handleSubmit(onSubmit)}
+              onPress={handleSubmit(onSubmit, onInvalid)}
               disabled={isSubmitting}
               activeOpacity={0.8}
-              className="w-full h-13 bg-lojista rounded-2xl items-center justify-center shadow-sm mt-4"
+              className="w-full h-14 bg-lojista rounded-2xl items-center justify-center shadow-sm mt-2"
             >
               {isSubmitting ? (
                 <ActivityIndicator color="#FFFFFF" />

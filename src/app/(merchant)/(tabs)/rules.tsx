@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -19,6 +19,7 @@ import {
   useSimulateLoyaltyRule,
   useUpdateLoyaltyRule,
 } from '@/hooks/useLoyaltyRules';
+import { extractApiErrorMessage } from '@/services/api';
 import { EstablishmentProfile, useAuthStore } from '@/stores/use-auth-store';
 
 export default function MerchantRulesScreen() {
@@ -55,21 +56,23 @@ export default function MerchantRulesScreen() {
   const [pointsPerBase, setPointsPerBase] = useState('1');
   const [minPurchaseAmount, setMinPurchaseAmount] = useState('0');
   const [maxPointsPerPurchase, setMaxPointsPerPurchase] = useState('');
-  const [initializedRuleVersion, setInitializedRuleVersion] = useState<number | null>(null);
+  const initializedRuleVersionRef = useRef<number | null>(null);
 
   // Sincroniza valores do formulário com a versão mais recente da regra
-  if (activeRule && activeRule.version !== initializedRuleVersion) {
-    setInitializedRuleVersion(activeRule.version);
-    setName(activeRule.name || '');
-    setBaseAmount(String(activeRule.baseAmount || '10'));
-    setPointsPerBase(String(activeRule.pointsPerBase || '1'));
-    setMinPurchaseAmount(String(activeRule.minPurchaseAmount ?? '0'));
-    setMaxPointsPerPurchase(
-      activeRule.maxPointsPerPurchase !== null && activeRule.maxPointsPerPurchase !== undefined
-        ? String(activeRule.maxPointsPerPurchase)
-        : ''
-    );
-  }
+  useEffect(() => {
+    if (activeRule && activeRule.version !== initializedRuleVersionRef.current) {
+      initializedRuleVersionRef.current = activeRule.version;
+      setName(activeRule.name || '');
+      setBaseAmount(String(activeRule.baseAmount || '10'));
+      setPointsPerBase(String(activeRule.pointsPerBase || '1'));
+      setMinPurchaseAmount(String(activeRule.minPurchaseAmount ?? '0'));
+      setMaxPointsPerPurchase(
+        activeRule.maxPointsPerPurchase !== null && activeRule.maxPointsPerPurchase !== undefined
+          ? String(activeRule.maxPointsPerPurchase)
+          : ''
+      );
+    }
+  }, [activeRule]);
 
   const updateMutation = useUpdateLoyaltyRule();
 
@@ -81,8 +84,10 @@ export default function MerchantRulesScreen() {
 
     const parsedBase = parseFloat(baseAmount.replace(',', '.'));
     const parsedPoints = parseInt(pointsPerBase, 10);
-    const parsedMinPurchase = parseFloat(minPurchaseAmount.replace(',', '.'));
-    const parsedMaxPoints = maxPointsPerPurchase ? parseInt(maxPointsPerPurchase, 10) : null;
+    const trimmedMin = minPurchaseAmount.trim();
+    const parsedMinPurchase = trimmedMin ? parseFloat(trimmedMin.replace(',', '.')) : 0;
+    const trimmedMax = maxPointsPerPurchase.trim();
+    const parsedMaxPoints = trimmedMax ? parseInt(trimmedMax, 10) : null;
 
     if (isNaN(parsedBase) || parsedBase <= 0) {
       Alert.alert('Validação', 'O valor base deve ser maior que R$ 0,00.');
@@ -94,21 +99,28 @@ export default function MerchantRulesScreen() {
       return;
     }
 
+    if (isNaN(parsedMinPurchase) || parsedMinPurchase < 0) {
+      Alert.alert('Validação', 'A compra mínima deve ser um valor maior ou igual a R$ 0,00.');
+      return;
+    }
+
+    if (trimmedMax && (parsedMaxPoints === null || isNaN(parsedMaxPoints) || parsedMaxPoints < 1)) {
+      Alert.alert('Validação', 'O teto máximo de pontos deve ser um inteiro maior ou igual a 1.');
+      return;
+    }
+
     try {
       await updateMutation.mutateAsync({
         name: name.trim() || undefined,
         baseAmount: parsedBase,
         pointsPerBase: parsedPoints,
-        minPurchaseAmount: isNaN(parsedMinPurchase) ? 0 : parsedMinPurchase,
+        minPurchaseAmount: parsedMinPurchase,
         maxPointsPerPurchase: parsedMaxPoints,
       });
 
       Alert.alert('Sucesso', 'Nova versão da regra de fidelidade publicada com sucesso!');
     } catch (err: unknown) {
-      const maybeAxios = err as { response?: { data?: { message?: string } } };
-      const msg =
-        maybeAxios?.response?.data?.message || 'Falha ao publicar nova versão da regra de fidelidade.';
-      Alert.alert('Erro', msg);
+      Alert.alert('Erro', extractApiErrorMessage(err, 'Falha ao publicar nova versão da regra de fidelidade.'));
     }
   };
 
@@ -169,15 +181,15 @@ export default function MerchantRulesScreen() {
                 </Text>
                 <Text className="text-white/95 text-base font-medium leading-relaxed mt-1">
                   {activeRule?.humanReadableSummary ||
-                    `A cada R$ ${activeRule?.baseAmount?.toFixed(2)} você ganha ${activeRule?.pointsPerBase} ponto(s).`}
+                    `A cada R$ ${Number(activeRule?.baseAmount ?? 0).toFixed(2)} você ganha ${activeRule?.pointsPerBase} ponto(s).`}
                 </Text>
 
                 <View className="flex-row gap-4 pt-4 mt-3 border-t border-white/20">
                   <View>
                     <Text className="text-white/70 text-xs">Compra Mínima</Text>
                     <Text className="text-white font-bold text-sm">
-                      {activeRule?.minPurchaseAmount
-                        ? `R$ ${activeRule.minPurchaseAmount.toFixed(2)}`
+                      {Number(activeRule?.minPurchaseAmount)
+                        ? `R$ ${Number(activeRule?.minPurchaseAmount).toFixed(2)}`
                         : 'Sem valor mín.'}
                     </Text>
                   </View>

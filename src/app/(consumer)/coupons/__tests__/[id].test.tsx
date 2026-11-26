@@ -50,7 +50,7 @@ describe('ConsumerCouponDetailScreen (TASK-11)', () => {
     discountValue: 15,
     minPurchaseAmount: 50,
     status: 'ACTIVE',
-    expiresAt: '2026-10-30T23:59:59Z',
+    expiresAt: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString(),
     createdAt: '2026-10-21T12:00:00Z',
     reward: {
       id: 5,

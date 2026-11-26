@@ -76,6 +76,16 @@ export interface LogoutResponse {
   message: string;
 }
 
+function unwrapAuthBody<T>(body: unknown): T {
+  if (!body || typeof body !== 'object') {
+    throw new Error('Resposta inválida do servidor. Verifique o endereço da API.');
+  }
+  if ('data' in body && (body as { data?: T }).data !== undefined) {
+    return (body as { data: T }).data;
+  }
+  return body as T;
+}
+
 /**
  * Serviço de autenticação e contas
  */
@@ -89,8 +99,7 @@ export const authService = {
       '/auth/login',
       payload
     );
-    const body = response.data;
-    return (body && 'data' in body ? body.data : body) as LoginResponse;
+    return unwrapAuthBody<LoginResponse>(response.data);
   },
 
   /**
@@ -101,8 +110,7 @@ export const authService = {
     const response = await apiClient.post<
       SignupCustomerResponse | { data: SignupCustomerResponse }
     >('/auth/customer/signup', payload);
-    const body = response.data;
-    return (body && 'data' in body ? body.data : body) as SignupCustomerResponse;
+    return unwrapAuthBody<SignupCustomerResponse>(response.data);
   },
 
   /**
@@ -115,8 +123,7 @@ export const authService = {
     const response = await apiClient.post<
       RegisterEstablishmentResponse | { data: RegisterEstablishmentResponse }
     >('/auth/establishment/register', payload);
-    const body = response.data;
-    return (body && 'data' in body ? body.data : body) as RegisterEstablishmentResponse;
+    return unwrapAuthBody<RegisterEstablishmentResponse>(response.data);
   },
 
   /**
@@ -127,8 +134,7 @@ export const authService = {
     const response = await apiClient.post<LogoutResponse | { data: LogoutResponse }>(
       '/account/logout'
     );
-    const body = response.data;
-    return (body && 'data' in body ? body.data : body) as LogoutResponse;
+    return unwrapAuthBody<LogoutResponse>(response.data);
   },
 };
 

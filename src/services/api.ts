@@ -71,17 +71,123 @@ apiClient.interceptors.response.use(
 );
 
 /**
- * Endpoint de health check para validação de conectividade em modo desenvolvimento.
- * Tenta GET / e faz fallback para GET /swagger.
+ * Extrai mapa de erros por campo de respostas 422 do AdonisJS/VineJS.
+ */
+export const extractApiFieldErrors = (err: unknown): Record<string, string> => {
+  const maybeAxios = err as {
+    response?: {
+      data?: {
+        errors?: { field?: string; message?: string }[];
+      };
+    };
+  };
+  const errors = maybeAxios?.response?.data?.errors;
+  if (!Array.isArray(errors)) return {};
+
+  const result: Record<string, string> = {};
+  for (const item of errors) {
+    if (item?.field && item?.message && !result[item.field]) {
+      result[item.field] = item.message;
+    }
+  }
+  return result;
+};
+
+/**
+ * Extrai mensagem de erro esclarecedora de erros Axios (rede, timeout, 4xx, 5xx) ou erros locais.
+ */
+export const extractApiErrorMessage = (err: unknown, fallback: string): string => {
+  const maybeAxios = err as {
+    isAxiosError?: boolean;
+    code?: string;
+    message?: string;
+    response?: {
+      status?: number;
+      data?: {
+        code?: string;
+        message?: string;
+        errors?: { field?: string; message?: string }[];
+      } | string;
+    };
+  };
+
+  if (!maybeAxios?.response) {
+    if (maybeAxios?.code === 'ECONNABORTED' || maybeAxios?.code === 'ETIMEDOUT') {
+      return 'Tempo limite excedido ao conectar ao servidor. Verifique sua conexão e tente novamente.';
+    }
+
+    if (
+      maybeAxios?.isAxiosError ||
+      maybeAxios?.code === 'ERR_NETWORK' ||
+      maybeAxios?.message === 'Network Error'
+    ) {
+      const devHint =
+        typeof __DEV__ !== 'undefined' && __DEV__ ? ` (${API_BASE_URL})` : '';
+      return `Não foi possível conectar ao servidor${devHint}. Verifique sua internet e se a API está em execução.`;
+    }
+
+    if (err instanceof Error && err.message) {
+      return err.message;
+    }
+
+    return fallback;
+  }
+
+  const status = maybeAxios.response.status ?? 0;
+  const rawData = maybeAxios.response.data;
+
+  if (typeof rawData === 'string') {
+    if (status >= 500) {
+      return `Erro interno no servidor (HTTP ${status}). Tente novamente em instantes.`;
+    }
+    return fallback;
+  }
+
+  const data = rawData;
+  if (data?.code === 'E_INVALID_CREDENTIALS') {
+    return 'E-mail ou senha incorretos.';
+  }
+
+  if (Array.isArray(data?.errors) && data.errors.length > 0) {
+    const messages = data.errors
+      .map((item) => item?.message?.trim())
+      .filter((msg): msg is string => Boolean(msg))
+      .map((msg) =>
+        msg === 'Invalid user credentials' ? 'E-mail ou senha incorretos.' : msg
+      );
+    const unique = Array.from(new Set(messages));
+    if (unique.length > 0) {
+      return unique.join('\n');
+    }
+  }
+
+  if (data?.message) {
+    if (data.message === 'Invalid user credentials') {
+      return 'E-mail ou senha incorretos.';
+    }
+    return data.message;
+  }
+
+  if (status >= 500) {
+    return `Erro interno no servidor (HTTP ${status}). Tente novamente em instantes.`;
+  }
+
+  return fallback;
+};
+
+/**
+ * Endpoint de health check para validação de conectividade.
+ * Tenta GET /api/v1/health e faz fallback para GET / na raiz do servidor.
  */
 export const checkHealth = async (config?: AxiosRequestConfig): Promise<boolean> => {
   try {
-    const response = await apiClient.get('/', config);
+    const response = await apiClient.get('/health', config);
     return response.status >= 200 && response.status < 300;
   } catch {
     try {
-      const swaggerResponse = await apiClient.get('/swagger', config);
-      return swaggerResponse.status >= 200 && swaggerResponse.status < 300;
+      const rootUrl = API_BASE_URL.replace(/\/api\/v1\/?$/, '') + '/';
+      const rootResponse = await axios.get(rootUrl, { timeout: 15000, ...config });
+      return rootResponse.status >= 200 && rootResponse.status < 300;
     } catch {
       return false;
     }

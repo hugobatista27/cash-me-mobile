@@ -55,14 +55,14 @@ export default function LoyaltyRuleHistoryScreen() {
 
         <Text className="text-xs text-neutros-cinza leading-relaxed mb-3">
           {item.humanReadableSummary ||
-            `A cada R$ ${item.baseAmount?.toFixed(2)} ganha ${item.pointsPerBase} ponto(s).`}
+            `A cada R$ ${Number(item.baseAmount ?? 0).toFixed(2)} ganha ${item.pointsPerBase} ponto(s).`}
         </Text>
 
         <View className="flex-row gap-4 pt-3 border-t border-neutros-fundo">
           <View>
             <Text className="text-[10px] text-neutros-cinza uppercase">Base</Text>
             <Text className="text-xs font-bold text-neutros-texto">
-              R$ {item.baseAmount?.toFixed(2)}
+              R$ {Number(item.baseAmount ?? 0).toFixed(2)}
             </Text>
           </View>
 
@@ -76,8 +76,8 @@ export default function LoyaltyRuleHistoryScreen() {
           <View>
             <Text className="text-[10px] text-neutros-cinza uppercase">Mínimo</Text>
             <Text className="text-xs font-bold text-neutros-texto">
-              {item.minPurchaseAmount
-                ? `R$ ${item.minPurchaseAmount.toFixed(2)}`
+              {Number(item.minPurchaseAmount)
+                ? `R$ ${Number(item.minPurchaseAmount).toFixed(2)}`
                 : 'R$ 0,00'}
             </Text>
           </View>

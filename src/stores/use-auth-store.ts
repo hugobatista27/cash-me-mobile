@@ -1,5 +1,7 @@
 import { create } from 'zustand';
 
+import { authService } from '@/services/auth';
+import { queryClient } from '@/services/query-client';
 import {
   getAuthToken,
   getSessionData,
@@ -9,7 +11,7 @@ import {
   saveSessionData,
 } from '@/services/storage';
 
-export type UserType = 'CUSTOMER' | 'ESTABLISHMENT';
+export type UserType = 'CUSTOMER' | 'ESTABLISHMENT' | 'SUPER_ADMIN';
 export type UserStatus = 'ACTIVE' | 'INACTIVE' | 'BLOCKED';
 
 export interface User {
@@ -36,7 +38,7 @@ export interface Establishment {
   id: number;
   cnpj: string;
   tradeName: string;
-  status: 'ACTIVE' | 'PENDING' | 'BLOCKED' | 'SUSPENDED';
+  status: 'ACTIVE' | 'PENDING' | 'INACTIVE' | 'BLOCKED' | 'SUSPENDED';
   legalName?: string;
 }
 
@@ -70,24 +72,55 @@ export const useAuthStore = create<AuthState>((set) => ({
   isRestoringSession: true,
 
   setAuth: async (payload) => {
+    const compactProfile = payload.profile
+      ? 'role' in payload.profile
+        ? {
+            id: payload.profile.id,
+            fullName: payload.profile.fullName,
+            role: payload.profile.role,
+          }
+        : {
+            id: payload.profile.id,
+            fullName: payload.profile.fullName,
+            cpf: payload.profile.cpf,
+            phone: payload.profile.phone,
+          }
+      : null;
+
+    const compactEstablishment = payload.establishment
+      ? {
+          id: payload.establishment.id,
+          cnpj: payload.establishment.cnpj,
+          tradeName: payload.establishment.tradeName,
+          status: payload.establishment.status,
+          legalName: payload.establishment.legalName,
+        }
+      : null;
+
     await saveAuthToken(payload.token);
     await saveSessionData({
-      user: payload.user,
-      profile: payload.profile ?? null,
-      establishment: payload.establishment ?? null,
+      user: {
+        id: payload.user.id,
+        email: payload.user.email,
+        userType: payload.user.userType,
+        status: payload.user.status,
+      },
+      profile: compactProfile,
+      establishment: compactEstablishment,
     });
 
     set({
       user: payload.user,
       token: payload.token,
-      profile: payload.profile ?? null,
-      establishment: payload.establishment ?? null,
+      profile: compactProfile,
+      establishment: compactEstablishment,
       isAuthenticated: true,
       isRestoringSession: false,
     });
   },
 
   clearAuth: async () => {
+    queryClient.clear();
     await removeAuthToken();
     await removeSessionData();
 
@@ -161,6 +194,12 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   logout: async () => {
+    try {
+      await authService.logout();
+    } catch {
+      // Ignora erro de rede ao revogar token no logout
+    }
+    queryClient.clear();
     await removeAuthToken();
     await removeSessionData();
 

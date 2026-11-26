@@ -38,7 +38,7 @@ describe('ConsumerCouponsScreen (TASK-11)', () => {
     discountType: 'FIXED_AMOUNT',
     discountValue: 15,
     status: 'ACTIVE',
-    expiresAt: '2026-10-30T23:59:59Z',
+    expiresAt: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString(),
     reward: {
       id: 5,
       title: 'Cupom R$ 15 OFF',

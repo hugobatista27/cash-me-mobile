@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import * as Clipboard from 'expo-clipboard';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import {
@@ -16,12 +17,23 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { SefazWebviewModal } from '@/components/SefazWebviewModal';
 import { useProcessInvoice } from '@/hooks/useInvoices';
-import { extractAccessKey, formatAccessKey, parseNfceContent } from '@/utils/nfceParser';
+import { extractApiErrorMessage } from '@/services/api';
+import {
+  extractAccessKey,
+  formatAccessKey,
+  isIssuedWithin48Hours,
+  NfceData,
+  parseNfceContent,
+  parsePtBrDateToIso,
+} from '@/utils/nfceParser';
+
+const DEFAULT_SEFAZ_SC_URL = 'https://sat.sef.sc.gov.br/nfce/consulta';
+const DEFAULT_SEFAZ_PR_URL = 'https://www.fazenda.pr.gov.br/nfce/consulta';
 
 export default function ConsumerScanManualScreen() {
   const router = useRouter();
   const [rawInput, setRawInput] = useState('');
-  const [webviewOpen, setWebviewOpen] = useState(false);
+  const [sefazUrl, setSefazUrl] = useState<string | null>(null);
   const processMutation = useProcessInvoice();
 
   const digitsOnly = rawInput.replace(/\D/g, '').slice(0, 44);
@@ -37,7 +49,7 @@ export default function ConsumerScanManualScreen() {
     setRawInput(cleaned);
   };
 
-  const handleProcessManualKey = async () => {
+  const handleOpenSefazForManualKey = async () => {
     if (!isComplete) {
       Alert.alert(
         'Chave Incompleta',
@@ -56,16 +68,73 @@ export default function ConsumerScanManualScreen() {
       return;
     }
 
+    await Clipboard.setStringAsync(parsed.accessKey);
+    const portalUrl =
+      parsed.issuerState === 'PR' ? DEFAULT_SEFAZ_PR_URL : DEFAULT_SEFAZ_SC_URL;
+
+    Alert.alert(
+      'Chave Copiada',
+      'A chave de 44 dígitos foi copiada. Cole no portal da SEFAZ, resolva o CAPTCHA se solicitado e clique em "Extrair NFC-e" para validar o valor e a data reais.',
+      [
+        {
+          text: 'Abrir Portal SEFAZ',
+          onPress: () => setSefazUrl(portalUrl),
+        },
+      ]
+    );
+  };
+
+  const handleWebviewExtracted = async (data: NfceData) => {
+    setSefazUrl(null);
+
+    const extractedKey = data.info.chaveAcesso.replace(/\D/g, '');
+    const accessKey = extractedKey.length === 44 ? extractedKey : digitsOnly;
+    if (accessKey.length !== 44) {
+      Alert.alert('Extração Incompleta', 'Não foi possível identificar a chave de 44 dígitos.');
+      return;
+    }
+
+    const stateCode = accessKey.substring(0, 2);
+    const issuerState = stateCode === '42' ? 'SC' : stateCode === '41' ? 'PR' : undefined;
+    if (!issuerState) {
+      Alert.alert('Estado Não Homologado (RN07)', 'Apenas NFC-es de SC e PR são aceitas.');
+      return;
+    }
+
+    const totalAmount = data.totais.valorPagar || data.totais.valorTotal || 0;
+    if (totalAmount <= 0) {
+      Alert.alert(
+        'Valor Não Identificado',
+        'Não foi possível extrair o valor real da compra na página da SEFAZ.'
+      );
+      return;
+    }
+
+    if (data.info.dataEmissao && !isIssuedWithin48Hours(data.info.dataEmissao)) {
+      Alert.alert(
+        'Nota Expirada (RN01)',
+        'Esta nota fiscal foi emitida há mais de 48 horas e não é elegível para pontuação.'
+      );
+      return;
+    }
+
+    const issuerCnpj = data.emitente.cnpj.replace(/\D/g, '') || accessKey.substring(6, 20);
+    const issuedAt = parsePtBrDateToIso(data.info.dataEmissao) || new Date().toISOString();
+
     try {
       const response = await processMutation.mutateAsync({
-        accessKey: parsed.accessKey,
-        issuerState: parsed.issuerState,
-        issuerCnpj: parsed.issuerCnpj,
-        qrCodeUrl:
-          parsed.qrCodeUrl ||
-          `https://sat.sef.sc.gov.br/nfce/qrcode?p=${parsed.accessKey}`,
-        issuedAt: new Date().toISOString(),
-        totalAmount: 100.0,
+        accessKey,
+        issuerState,
+        issuerCnpj,
+        qrCodeUrl: data.url,
+        issuedAt,
+        totalAmount,
+        items: data.itens.map((item) => ({
+          rawDescription: item.descricao,
+          quantity: item.quantidade,
+          unitPrice: item.valorUnitario,
+          totalPrice: item.valorTotal,
+        })),
       });
 
       router.replace({
@@ -76,15 +145,15 @@ export default function ConsumerScanManualScreen() {
           tradeName: response.establishment?.tradeName || 'Estabelecimento Parceiro',
           accessKey: response.invoice.accessKey,
           status: response.status,
+          rejectionReason: response.rejectionReason || '',
         },
       });
     } catch (err: unknown) {
-      const maybeAxios = err as { response?: { status?: number; data?: { code?: string; message?: string } } };
-      const status = maybeAxios?.response?.status;
-      const code = maybeAxios?.response?.data?.code;
-      const message = maybeAxios?.response?.data?.message;
-
-      if (status === 409 || code === 'E_DUPLICATE_INVOICE') {
+      const maybeAxios = err as { response?: { status?: number; data?: { code?: string } } };
+      if (
+        maybeAxios?.response?.status === 409 ||
+        maybeAxios?.response?.data?.code === 'E_DUPLICATE_INVOICE'
+      ) {
         Alert.alert(
           'Nota Fiscal Já Processada (RN02)',
           'Esta NFC-e já foi pontuada anteriormente. Cada nota fiscal só pode conceder pontos uma única vez.'
@@ -92,7 +161,7 @@ export default function ConsumerScanManualScreen() {
       } else {
         Alert.alert(
           'Erro ao Processar Nota',
-          message || 'Não foi possível validar e computar os pontos para esta chave de acesso.'
+          extractApiErrorMessage(err, 'Não foi possível validar e computar os pontos para esta nota.')
         );
       }
     }
@@ -135,7 +204,7 @@ export default function ConsumerScanManualScreen() {
               Localize os 44 dígitos
             </Text>
             <Text className="text-xs text-neutros-cinza leading-relaxed">
-              A chave de acesso está impressa no cupom fiscal próximo ao código de barras ou logo abaixo do QR Code.
+              A chave de acesso está impressa no cupom fiscal próximo ao código de barras ou logo abaixo do QR Code. Validamos os dados reais diretamente no portal da SEFAZ.
             </Text>
           </View>
 
@@ -170,9 +239,9 @@ export default function ConsumerScanManualScreen() {
             </Text>
           </View>
 
-          {/* Botão de Envio */}
+          {/* Botão de Consulta na SEFAZ e Processamento Real */}
           <TouchableOpacity
-            onPress={handleProcessManualKey}
+            onPress={handleOpenSefazForManualKey}
             disabled={!isComplete || processMutation.isPending}
             activeOpacity={0.8}
             className={`w-full h-14 rounded-2xl items-center justify-center shadow-lg ${
@@ -185,37 +254,41 @@ export default function ConsumerScanManualScreen() {
               <ActivityIndicator color="#FFFFFF" />
             ) : (
               <View className="flex-row items-center gap-2">
-                <Ionicons name="sparkles" size={18} color="#FFFFFF" />
-                <Text className="text-white font-bold text-base">Processar e Ganhar Pontos</Text>
+                <Ionicons name="globe-outline" size={18} color="#FFFFFF" />
+                <Text className="text-white font-bold text-base">Consultar na SEFAZ e Pontuar</Text>
               </View>
             )}
           </TouchableOpacity>
 
-          {/* Atalho para Abrir Portal SEFAZ SC via WebView */}
-          <TouchableOpacity
-            onPress={() => setWebviewOpen(true)}
-            activeOpacity={0.7}
-            className="w-full py-4 items-center justify-center border border-neutros-borda bg-white rounded-2xl flex-row gap-2 mt-4"
-          >
-            <Ionicons name="globe-outline" size={18} color="#008D4C" />
-            <Text className="text-neutros-texto font-bold text-sm">
-              🌐 Abrir Portal SEFAZ SC (com CAPTCHA)
-            </Text>
-          </TouchableOpacity>
+          {/* Atalhos diretos para Portais SEFAZ SC/PR */}
+          <View className="flex-row gap-2 mt-4">
+            <TouchableOpacity
+              onPress={() => setSefazUrl(DEFAULT_SEFAZ_SC_URL)}
+              activeOpacity={0.7}
+              className="flex-1 py-4 items-center justify-center border border-neutros-borda bg-white rounded-2xl flex-row gap-1.5"
+            >
+              <Ionicons name="globe-outline" size={16} color="#008D4C" />
+              <Text className="text-neutros-texto font-bold text-xs">Portal SEFAZ SC</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={() => setSefazUrl(DEFAULT_SEFAZ_PR_URL)}
+              activeOpacity={0.7}
+              className="flex-1 py-4 items-center justify-center border border-neutros-borda bg-white rounded-2xl flex-row gap-1.5"
+            >
+              <Ionicons name="globe-outline" size={16} color="#008D4C" />
+              <Text className="text-neutros-texto font-bold text-xs">Portal SEFAZ PR</Text>
+            </TouchableOpacity>
+          </View>
         </ScrollView>
       </KeyboardAvoidingView>
 
-      {webviewOpen && (
+      {sefazUrl && (
         <SefazWebviewModal
-          visible={webviewOpen}
-          url="https://sat.sef.sc.gov.br/nfce/consulta"
-          onClose={() => setWebviewOpen(false)}
-          onExtracted={(data) => {
-            setWebviewOpen(false);
-            if (data.info.chaveAcesso) {
-              setRawInput(data.info.chaveAcesso.replace(/\D/g, ''));
-            }
-          }}
+          visible={Boolean(sefazUrl)}
+          url={sefazUrl}
+          onClose={() => setSefazUrl(null)}
+          onExtracted={handleWebviewExtracted}
         />
       )}
     </SafeAreaView>

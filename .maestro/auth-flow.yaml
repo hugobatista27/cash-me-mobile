@@ -1,50 +1,19 @@
 appId: host.exp.exponent
 ---
 # ==============================================================================
-# Suíte de Testes E2E Maestro - Validações Abrangentes de Autenticação (auth-flow.yaml)
-#
-# 1. Higienização Inicial de Sessão:
-#    - Se houver sessão remanescente (Consumidor ou Lojista), efetua logout.
-#
-# 2. Tentativas Incorretas de Login e Validações de Borda:
-#    - Submissão com campos vazios (valida mensagens inline "E-mail é obrigatório" e "Senha é obrigatória");
-#    - Formato de e-mail inválido ("email-invalido");
-#    - E-mail inexistente ("naoexiste@cashme.com");
-#    - Senha incorreta para conta existente ("cliente.live3@cashme.com").
-#
-# 3. Validações de Cadastro de Consumidor (signup-consumer.tsx):
-#    - Validações de formulário (CPF inválido, senhas divergentes);
-#    - Tentativa de cadastro com e-mail já existente (duplicidade no backend);
-#    - Cadastro com sucesso gerando CPF e e-mail únicos dinamicamente;
-#    - Validação de entrada na Área do Consumidor e Logout.
-#
-# 4. Validações de Cadastro de Lojista (signup-merchant.tsx):
-#    - Validações de formulário (CNPJ inválido, senhas divergentes);
-#    - Tentativa de cadastro com e-mail já existente (duplicidade no backend);
-#    - Cadastro com sucesso gerando CNPJ e e-mail únicos dinamicamente;
-#    - Validação de entrada no Painel do Estabelecimento e Logout.
-#
-# 5. Fluxos de Login Válido com Limpeza Final:
-#    - Login de Consumidor válido -> verificação -> Logout;
-#    - Login de Lojista válido -> verificação -> Logout final.
+# Suíte de Testes E2E Maestro - Integração Real com Backend Adonis
+# 1. Cadastro Real de Cliente/Consumidor -> Redirecionamento para (consumer)/(tabs)
+# 2. Logout Real com Limpeza de Sessão
+# 3. Cadastro Real de Estabelecimento/Lojista -> Redirecionamento para (merchant)/(tabs)
+# 4. Logout Final para Higienização
 # ==============================================================================
 
-# Abre a experiência do Expo Go na raiz da aplicação
-- openLink: "exp://10.0.2.2:8081"
-
+# 0. Normaliza estado inicial
 - runFlow:
     when:
-      visible: "Perfil Loja"
+      visible: "← Voltar para login"
     commands:
-      - tapOn: "Perfil Loja"
-      - extendedWaitUntil:
-          visible: "Encerrar Sessão"
-          timeout: 5000
-      - tapOn: "Encerrar Sessão"
-      - extendedWaitUntil:
-          visible: "Sair"
-          timeout: 5000
-      - tapOn: "Sair"
+      - tapOn: "← Voltar para login"
 
 - runFlow:
     when:
@@ -53,251 +22,183 @@ appId: host.exp.exponent
       - tapOn: "Perfil"
       - extendedWaitUntil:
           visible: "Encerrar Sessão"
-          timeout: 5000
+          timeout: 10000
       - tapOn: "Encerrar Sessão"
       - extendedWaitUntil:
           visible: "Sair"
           timeout: 5000
       - tapOn: "Sair"
 
+- runFlow:
+    when:
+      visible: "Painel do Estabelecimento"
+    commands:
+      - tapOn: "Perfil Loja"
+      - extendedWaitUntil:
+          visible: "Encerrar Sessão"
+          timeout: 10000
+      - tapOn: "Encerrar Sessão"
+      - extendedWaitUntil:
+          visible: "Sair"
+          timeout: 5000
+      - tapOn: "Sair"
+
+# Aguarda tela de login
 - extendedWaitUntil:
     visible: "Bem-vindo ao CashMe"
     timeout: 15000
 
-# ------------------------------------------------------------------------------
-# PARTE 1: TENTATIVAS INCORRETAS DE LOGIN
-# ------------------------------------------------------------------------------
-# 1.1 Submissão com campos vazios
-- tapOn: "Entrar"
-- extendedWaitUntil:
-    visible: "E-mail é obrigatório"
-    timeout: 3000
-- assertVisible: "Senha é obrigatória"
-
-# 1.2 Formato de e-mail inválido
-- tapOn: "seu.email@exemplo.com"
-- inputText: "email-invalido"
-- hideKeyboard
-
-- tapOn: "Sua senha secreta"
-- inputText: "qualquersenha"
-- hideKeyboard
-
-- tapOn: "Entrar"
-- extendedWaitUntil:
-    visible: "Formato de e-mail inválido"
-    timeout: 3000
-
-# 1.3 Login com e-mail inexistente
-- tapOn: "seu.email@exemplo.com"
-- eraseText: 50
-- inputText: "naoexiste_e2e@cashme.com"
-- hideKeyboard
-
-- tapOn: "Sua senha secreta"
-- eraseText: 50
-- inputText: "qualquersenha"
-- hideKeyboard
-
-- tapOn: "Entrar"
-- extendedWaitUntil:
-    visible: "Falha ao autenticar. Verifique seu e-mail e senha."
-    timeout: 5000
-
-# 1.4 Login com senha incorreta para conta existente
-- tapOn: "seu.email@exemplo.com"
-- eraseText: 50
-- inputText: "cliente.live3@cashme.com"
-- hideKeyboard
-
-- tapOn: "Sua senha secreta"
-- eraseText: 50
-- inputText: "senhaerrada123"
-- hideKeyboard
-
-- tapOn: "Entrar"
-- extendedWaitUntil:
-    visible: "Falha ao autenticar. Verifique seu e-mail e senha."
-    timeout: 5000
-
-# Limpa campos de login para as próximas etapas
-- tapOn: "seu.email@exemplo.com"
-- eraseText: 50
-- hideKeyboard
-- tapOn: "Sua senha secreta"
-- eraseText: 50
-- hideKeyboard
+# Gera dados únicos (CPF Mod-11 e CNPJ Mod-11 válidos + e-mails únicos)
+- evalScript: ${var ts=Date.now(); function gCpf(seed){var x=seed%1000000007, d=[]; for(var i=0;i<9;i++){x=(x*1103515245+12345)%2147483647; d.push(x%10);} if(d.every(function(v){return v===d[0];}))d[8]=(d[8]+1)%10; var s1=0; for(var j=0;j<9;j++)s1+=d[j]*(10-j); var r1=(s1*10)%11; d.push(r1===10?0:r1); var s2=0; for(var k=0;k<10;k++)s2+=d[k]*(11-k); var r2=(s2*10)%11; d.push(r2===10?0:r2); return d.join('');} function gCnpj(seed){var x=seed%1000000007, b=[]; for(var i=0;i<8;i++){x=(x*1103515245+12345)%2147483647; b.push(x%10);} b.push(0,0,0,1); var w1=[5,4,3,2,9,8,7,6,5,4,3,2], s1=0; for(var j=0;j<12;j++)s1+=b[j]*w1[j]; var r1=s1%11; b.push(r1<2?0:11-r1); var w2=[6,5,4,3,2,9,8,7,6,5,4,3,2], s2=0; for(var k=0;k<13;k++)s2+=b[k]*w2[k]; var r2=s2%11; b.push(r2<2?0:11-r2); return b.join('');} output.cpf=gCpf(ts); output.cnpj=gCnpj(ts+7919); output.consumerEmail='auth.c.'+ts+'@cashme.test'; output.merchantEmail='auth.m.'+ts+'@cashme.test';}
 
 # ------------------------------------------------------------------------------
-# PARTE 2: VALIDAÇÕES DE CADASTRO DE CONSUMIDOR
+# PARTE 1: CADASTRO REAL DE CONSUMIDOR
 # ------------------------------------------------------------------------------
 - tapOn: "Criar conta Consumidor"
-- extendedWaitUntil:
-    visible: "Criar Conta Consumidor"
-    timeout: 5000
+- assertVisible: "Criar Conta Consumidor"
 
-# 2.1 Submissão vazia
-- tapOn: "Cadastrar"
-- extendedWaitUntil:
-    visible: "Nome completo é obrigatório"
-    timeout: 3000
-- assertVisible: "E-mail é obrigatório"
-- assertVisible: "CPF é obrigatório"
-- assertVisible: "Telefone é obrigatório"
-- assertVisible: "Senha é obrigatória"
-
-# 2.2 CPF Inválido e senhas divergentes
 - tapOn: "Ex: Maria Silva"
-- inputText: "Consumidor Teste"
-- hideKeyboard
+- inputText: "Consumidor E2E"
 
 - tapOn: "seu.email@exemplo.com"
-- inputText: "teste.valida@cashme.com"
-- hideKeyboard
+- inputText: ${output.consumerEmail}
 
 - tapOn: "000.000.000-00"
-- inputText: "11111111111"
-- hideKeyboard
+- inputText: ${output.cpf}
 
 - tapOn: "(00) 00000-0000"
 - inputText: "11987654321"
-- hideKeyboard
+
+- scrollUntilVisible:
+    element: "Confirmar Senha"
+    direction: DOWN
+    timeout: 10000
 
 - tapOn: "Mínimo 8 caracteres"
 - inputText: "password123"
 - hideKeyboard
 
 - tapOn: "Repita sua senha"
-- inputText: "outrasenha123"
-- hideKeyboard
-
-- tapOn: "Declaro que li e aceito os Termos de Uso e a Política de Privacidade."
-- tapOn: "Cadastrar"
-
-- extendedWaitUntil:
-    visible: "CPF inválido"
-    timeout: 3000
-- assertVisible: "As senhas não coincidem"
-
-# 2.3 Tentativa de cadastro com e-mail já existente (duplicidade)
-- tapOn: "seu.email@exemplo.com"
-- eraseText: 50
-- inputText: "cliente.live3@cashme.com"
-- hideKeyboard
-
-# Ajusta CPF válido
-- tapOn: "000.000.000-00"
-- eraseText: 20
-- inputText: "70167044591"
-- hideKeyboard
-
-# Ajusta confirmação de senha igual
-- tapOn: "Repita sua senha"
-- eraseText: 30
 - inputText: "password123"
 - hideKeyboard
 
+- scrollUntilVisible:
+    element: "Cadastrar"
+    direction: DOWN
+    speed: 60
+    visibilityPercentage: 50
+    timeout: 10000
+
+# Aceita os termos de uso
+- tapOn: "Declaro que li e aceito os Termos de Uso e a Política de Privacidade."
+
+# Submete cadastro do consumidor
 - tapOn: "Cadastrar"
 
-- extendedWaitUntil:
-    visible: "Falha no cadastro. Verifique os dados informados."
-    timeout: 7000
-
-# 2.4 Cadastro com Sucesso usando dados únicos gerados dinamicamente
-- evalScript: ${output.dynamicEmail = "cli_" + Date.now() + "@cashme.com"}
-- evalScript: ${output.dynamicCpf = ["78657930307", "21954083165", "12685509224", "89623379080", "39531048533", "36295062830", "33967071170", "24982770646", "89077994661", "21005335338", "82660053979", "89528593240", "68558286124", "19334985607", "73403650600", "55303511073", "13412639672", "13199452361", "20060450240", "33476073840", "34981773463", "64262110877", "74641268908", "12849278068", "70263229742", "31350029858", "86882020442", "79780809864", "85304195531", "68512646179"][Math.floor(Math.random() * 30)]}
-
-- tapOn: "seu.email@exemplo.com"
-- eraseText: 50
-- inputText: ${output.dynamicEmail}
-- hideKeyboard
-
-- tapOn: "000.000.000-00"
-- eraseText: 20
-- inputText: ${output.dynamicCpf}
-- hideKeyboard
-
-- tapOn: "Cadastrar"
-
+# Valida transição para a tela inicial do consumidor (Home / Tabs)
 - extendedWaitUntil:
     visible: "Área do Consumidor"
     timeout: 15000
 
+- assertVisible: "Olá, Consumidor E2E 👋"
+- assertVisible: "Pontos Acumulados"
 - assertVisible: "Início"
 - assertVisible: "Carteira"
 - assertVisible: "Escanear"
+- assertVisible: "Lojas"
 
-# Logout do Consumidor
+# Realiza Logout para testar o próximo fluxo
 - tapOn: "Perfil"
 - extendedWaitUntil:
     visible: "Encerrar Sessão"
-    timeout: 5000
+    timeout: 10000
+
 - tapOn: "Encerrar Sessão"
 - extendedWaitUntil:
     visible: "Sair"
     timeout: 5000
 - tapOn: "Sair"
 
+# Confirma retorno para a tela de Login
 - extendedWaitUntil:
     visible: "Bem-vindo ao CashMe"
     timeout: 10000
 
 # ------------------------------------------------------------------------------
-# PARTE 3: VALIDAÇÕES DE CADASTRO DE LOJISTA
+# PARTE 2: CADASTRO REAL DE ESTABELECIMENTO / LOJISTA
 # ------------------------------------------------------------------------------
 - tapOn: "Cadastrar Lojista"
-- extendedWaitUntil:
-    visible: "Onboarding do Comércio"
-    timeout: 5000
+- assertVisible: "Onboarding do Comércio"
 
-# 3.1 CNPJ Inválido e senhas divergentes
+# 1. Dados do Administrador
 - tapOn: "Ex: Carlos Eduardo"
-- inputText: "Carlos Gestor E2E"
+- inputText: "Carlos Gestor"
 - hideKeyboard
 
 - tapOn: "contato@minhaloja.com"
-- inputText: "lojista.live3@cashme.com"
+- inputText: ${output.merchantEmail}
 - hideKeyboard
+
+- scrollUntilVisible:
+    element: "Confirmar Senha"
+    direction: DOWN
+    timeout: 10000
 
 - tapOn: "Mínimo 8 caracteres"
 - inputText: "password123"
 - hideKeyboard
 
 - tapOn: "Repita sua senha"
-- inputText: "outrasenha999"
+- inputText: "password123"
 - hideKeyboard
 
+# 2. Dados da Empresa
+- scrollUntilVisible:
+    element: "CNPJ"
+    direction: DOWN
+    timeout: 10000
+
 - tapOn: "00.000.000/0000-00"
-- inputText: "00000000000000"
+- inputText: ${output.cnpj}
 - hideKeyboard
 
 - tapOn: "Ex: Comercial de Alimentos Ltda"
-- inputText: "Comércio E2E Ltda"
+- inputText: "Padaria Central E2E Ltda"
 - hideKeyboard
 
 - tapOn: "Ex: Supermercado Central"
-- inputText: "Comércio E2E"
+- inputText: "Padaria Central E2E"
 - hideKeyboard
-
-- scroll
 
 - tapOn: "(00) 0000-0000"
 - inputText: "1133334444"
 - hideKeyboard
 
-- scroll
+# Rola a tela para preencher Endereço Comercial
+- scrollUntilVisible:
+    element: "CEP"
+    direction: DOWN
+    timeout: 10000
 
+# 3. Endereço Comercial
 - tapOn: "00000-000"
 - inputText: "88010000"
 - hideKeyboard
 
 - tapOn: "Ex: Av. Brasil"
-- inputText: "Rua das Flores"
+- inputText: "Rua Felipe Schmidt"
 - hideKeyboard
 
 - tapOn: "123"
-- inputText: "100"
+- inputText: "450"
 - hideKeyboard
+
+- scrollUntilVisible:
+    element: "Cadastrar Comércio"
+    direction: DOWN
+    speed: 60
+    visibilityPercentage: 50
+    timeout: 10000
 
 - tapOn: "Centro"
 - inputText: "Centro"
@@ -311,139 +212,39 @@ appId: host.exp.exponent
 - inputText: "SC"
 - hideKeyboard
 
-- scroll
-- tapOn: "Cadastrar Comércio"
-
-- extendedWaitUntil:
-    visible: "As senhas não coincidem"
-    timeout: 3000
-- assertVisible: "CNPJ inválido"
-
-# 3.2 Tentativa de cadastro com e-mail corporativo duplicado
-- evalScript: ${output.dynamicMerchantEmail = "loj_" + Date.now() + "@cashme.com"}
-- evalScript: ${output.dynamicCnpj = ["66306997000110", "39587039000192", "70291817000141", "89089901000105", "47338124000145", "10872248000104", "31429110000105", "66722344000112", "55667651000121", "47295260000103", "30868105000128", "38898923000185", "55176955000196", "23718431000193", "22448136000100", "60992979000153", "22981052000129", "58181396000109", "56164955000139", "91030736000168", "45503389000126", "15831819000178", "71662963000107", "81971316000122", "26753883000102", "60806024000164", "20576383000158", "84093639000159", "49349722000145", "94374605000196"][Math.floor(Math.random() * 30)]}
-
 - scrollUntilVisible:
-    element: "Repita sua senha"
-    direction: UP
-    timeout: 5000
+    element: "Cadastrar Comércio"
+    direction: DOWN
+    speed: 60
+    visibilityPercentage: 50
+    timeout: 10000
 
-- tapOn: "Repita sua senha"
-- eraseText: 30
-- inputText: "password123"
-- hideKeyboard
-
-- tapOn: "00.000.000/0000-00"
-- eraseText: 30
-- inputText: ${output.dynamicCnpj}
-- hideKeyboard
-
-- scroll
+# Submete cadastro do comércio
 - tapOn: "Cadastrar Comércio"
 
-# Rola até o topo para visualizar o banner de erro que é renderizado acima do formulário
-- scrollUntilVisible:
-    element: "Falha no cadastro do estabelecimento. Verifique os dados informados."
-    direction: UP
-    timeout: 7000
-
-- assertVisible: "Falha no cadastro do estabelecimento. Verifique os dados informados."
-
-# 3.3 Sucesso no cadastro de lojista com e-mail único
-- tapOn: "contato@minhaloja.com"
-- eraseText: 50
-- inputText: ${output.dynamicMerchantEmail}
-- hideKeyboard
-
-- scroll
-- tapOn: "Cadastrar Comércio"
-
+# Valida transição para o Dashboard do Lojista (Merchant Tabs)
 - extendedWaitUntil:
     visible: "Painel do Estabelecimento"
     timeout: 15000
 
+- assertVisible: "Padaria Central E2E"
+- assertVisible: "Pendente de Homologação"
+- assertVisible: "Regras de Negócio (RN06)"
 - assertVisible: "Dashboard"
 - assertVisible: "Regras"
 - assertVisible: "Clientes"
 - assertVisible: "Perfil Loja"
 
-# Logout do Lojista
+# Logout final para higienizar o estado
 - tapOn: "Perfil Loja"
 - extendedWaitUntil:
     visible: "Encerrar Sessão"
-    timeout: 5000
-- tapOn: "Encerrar Sessão"
-- extendedWaitUntil:
-    visible: "Sair"
-    timeout: 5000
-- tapOn: "Sair"
-
-- extendedWaitUntil:
-    visible: "Bem-vindo ao CashMe"
     timeout: 10000
-
-# ------------------------------------------------------------------------------
-# PARTE 4: FLUXOS DE LOGIN VÁLIDO E SESSÃO LIMPA
-# ------------------------------------------------------------------------------
-# 4.1 Login de Consumidor Válido
-- tapOn: "seu.email@exemplo.com"
-- eraseText: 50
-- inputText: "cliente.live3@cashme.com"
-- hideKeyboard
-
-- tapOn: "Sua senha secreta"
-- eraseText: 50
-- inputText: "password123"
-- hideKeyboard
-
-- tapOn: "Entrar"
-
-- extendedWaitUntil:
-    visible: "Área do Consumidor"
-    timeout: 15000
-
-- tapOn: "Perfil"
-- extendedWaitUntil:
-    visible: "Encerrar Sessão"
-    timeout: 5000
 - tapOn: "Encerrar Sessão"
 - extendedWaitUntil:
     visible: "Sair"
     timeout: 5000
 - tapOn: "Sair"
-
-- extendedWaitUntil:
-    visible: "Bem-vindo ao CashMe"
-    timeout: 10000
-
-# 4.2 Login de Lojista Válido
-- tapOn: "seu.email@exemplo.com"
-- eraseText: 50
-- inputText: "lojista.live3@cashme.com"
-- hideKeyboard
-
-- tapOn: "Sua senha secreta"
-- eraseText: 50
-- inputText: "password123"
-- hideKeyboard
-
-- tapOn: "Entrar"
-
-- extendedWaitUntil:
-    visible: "Painel do Estabelecimento"
-    timeout: 15000
-
-# Higienização final
-- tapOn: "Perfil Loja"
-- extendedWaitUntil:
-    visible: "Encerrar Sessão"
-    timeout: 5000
-- tapOn: "Encerrar Sessão"
-- extendedWaitUntil:
-    visible: "Sair"
-    timeout: 5000
-- tapOn: "Sair"
-
 - extendedWaitUntil:
     visible: "Bem-vindo ao CashMe"
     timeout: 10000

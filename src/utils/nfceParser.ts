@@ -36,7 +36,7 @@ export const STATE_IBGE_CODES: Record<string, 'SC' | 'PR'> = {
  */
 export const extractAccessKey = (input?: string | null): string | null => {
   if (!input) return null;
-  const match = input.match(/\b([0-9]{44})\b/);
+  const match = input.match(/(?:^|[^\d])([0-9]{44})(?!\d)/);
   if (match) {
     return match[1];
   }
@@ -58,6 +58,10 @@ export const isValidSefazUrl = (urlStr?: string | null): boolean => {
 
   try {
     const url = new URL(urlStr);
+    if (url.protocol !== 'https:' && url.protocol !== 'http:') {
+      return false;
+    }
+
     const host = url.hostname.toLowerCase();
 
     const isHomologatedHost = HOMOLOGATED_SEFAZ_HOSTS.some(
@@ -81,6 +85,25 @@ export const isValidSefazUrl = (urlStr?: string | null): boolean => {
 };
 
 /**
+ * Converte data em formato brasileiro ("DD/MM/YYYY" ou "DD/MM/YYYY HH:mm[:ss]") para ISO-8601 (-03:00).
+ */
+export const parsePtBrDateToIso = (dateStr?: string | null): string | null => {
+  if (!dateStr) return null;
+  const trimmed = dateStr.trim();
+
+  const brMatch = trimmed.match(/^(\d{2})\/(\d{2})\/(\d{4})(?:\s+(\d{2}):(\d{2})(?::(\d{2}))?)?$/);
+  if (brMatch) {
+    const [, day, month, year, hour = '00', minute = '00', second = '00'] = brMatch;
+    const isoCandidate = `${year}-${month}-${day}T${hour}:${minute}:${second}-03:00`;
+    const parsed = new Date(isoCandidate);
+    return isNaN(parsed.getTime()) ? null : parsed.toISOString();
+  }
+
+  const parsed = new Date(trimmed);
+  return isNaN(parsed.getTime()) ? null : parsed.toISOString();
+};
+
+/**
  * Valida a janela temporal de 48 horas para envio de notas (RN01).
  */
 export const isIssuedWithin48Hours = (issuedAt?: string | null): boolean => {
@@ -88,16 +111,17 @@ export const isIssuedWithin48Hours = (issuedAt?: string | null): boolean => {
     return true; // Se a data não vier na URL, a verificação cabe ao backend
   }
 
-  const date = new Date(issuedAt);
-  if (isNaN(date.getTime())) {
+  const normalizedIso = parsePtBrDateToIso(issuedAt);
+  if (!normalizedIso) {
     return true;
   }
 
+  const date = new Date(normalizedIso);
   const now = new Date();
   const diffMs = now.getTime() - date.getTime();
   const diffHours = diffMs / (1000 * 60 * 60);
 
-  return diffHours <= 48;
+  return diffHours <= 48 && diffHours >= -2;
 };
 
 /**
@@ -243,7 +267,12 @@ export function formatCurrency(value: number): string {
  */
 export function parseBrlNumber(val: string): number {
   if (!val) return 0;
-  const cleaned = val.replace(/[^\d,-]/g, '').replace(',', '.');
+  const numericMatch = val.match(/-?\d[\d.,]*/);
+  if (!numericMatch) return 0;
+  const token = numericMatch[0];
+  const cleaned = token.includes(',')
+    ? token.replace(/\./g, '').replace(',', '.')
+    : token;
   const num = parseFloat(cleaned);
   return isNaN(num) ? 0 : num;
 }

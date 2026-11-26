@@ -14,7 +14,9 @@ export default function MerchantDashboardScreen() {
   const { data: activeRule, isLoading: isLoadingRule } = useActiveLoyaltyRule();
 
   const tradeName = establishment?.tradeName || 'Meu Comércio';
-  const isPending = establishment?.status === 'PENDING';
+  const status = establishment?.status;
+  const isPending = status === 'PENDING';
+  const isInactive = status === 'INACTIVE';
 
   return (
     <SafeAreaView className="flex-1 bg-neutros-fundo">
@@ -43,11 +45,11 @@ export default function MerchantDashboardScreen() {
             <Text className="text-white/80 text-sm font-medium">Status do Comércio</Text>
             <View
               className={`px-3 py-1 rounded-full ${
-                isPending ? 'bg-amber-400' : 'bg-green-500'
+                isPending ? 'bg-amber-400' : isInactive ? 'bg-red-500' : 'bg-green-500'
               }`}
             >
               <Text className="text-white text-xs font-bold">
-                {isPending ? 'Pendente de Homologação' : 'Homologado'}
+                {isPending ? 'Pendente de Homologação' : isInactive ? 'Inativo / Suspenso' : 'Homologado'}
               </Text>
             </View>
           </View>

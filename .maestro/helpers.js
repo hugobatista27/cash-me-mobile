@@ -1,3 +1,5 @@
+/* global output */
+/* eslint-disable no-unused-vars */
 
 function generateDynamicCpf() {
   const rnd = () => Math.floor(Math.random() * 9);

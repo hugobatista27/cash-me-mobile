@@ -1,7 +1,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Link, useRouter } from 'expo-router';
-import React, { useState } from 'react';
-import { Controller, useForm } from 'react-hook-form';
+import React, { useEffect, useRef, useState } from 'react';
+import { Controller, FieldErrors, useForm } from 'react-hook-form';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -15,12 +15,14 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { z } from 'zod';
 
-import { authService } from '@/services/auth';
+import { extractApiErrorMessage } from '@/services/api';
+import { authService, LoginResponse } from '@/services/auth';
 import { useAuthStore } from '@/stores/use-auth-store';
 
 const loginSchema = z.object({
   email: z
     .string()
+    .trim()
     .min(1, 'E-mail é obrigatório')
     .email('Formato de e-mail inválido'),
   password: z
@@ -34,6 +36,7 @@ type LoginFormData = z.infer<typeof loginSchema>;
 export default function LoginScreen() {
   const router = useRouter();
   const { setAuth } = useAuthStore();
+  const scrollViewRef = useRef<ScrollView>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const {
@@ -48,44 +51,69 @@ export default function LoginScreen() {
     },
   });
 
+  useEffect(() => {
+    if (errorMessage) {
+      scrollViewRef.current?.scrollTo({ y: 0, animated: true });
+    }
+  }, [errorMessage]);
+
+  const onInvalid = (formErrors: FieldErrors<LoginFormData>) => {
+    const labels: string[] = [];
+    if (formErrors.email) labels.push('E-mail');
+    if (formErrors.password) labels.push('Senha');
+    if (labels.length > 0) {
+      setErrorMessage(`Verifique os campos destacados: ${labels.join(', ')}.`);
+    }
+  };
+
   const onSubmit = async (data: LoginFormData) => {
     setErrorMessage(null);
+    let response: LoginResponse;
     try {
-      const response = await authService.login({
-        email: data.email.trim(),
+      response = await authService.login({
+        email: data.email.trim().toLowerCase(),
         password: data.password,
       });
+    } catch (err: unknown) {
+      setErrorMessage(extractApiErrorMessage(err, 'Falha ao autenticar. Verifique seu e-mail e senha.'));
+      return;
+    }
 
+    if (response.user.userType !== 'ESTABLISHMENT' && response.user.userType !== 'CUSTOMER') {
+      setErrorMessage('Tipo de conta não suportado no aplicativo móvel. Utilize o painel administrativo.');
+      return;
+    }
+
+    try {
       await setAuth({
         user: response.user,
         token: response.token,
         profile: response.profile,
         establishment: response.establishment,
       });
+    } catch {
+      setErrorMessage('Login confirmado, mas houve erro ao salvar a sessão local. Tente novamente.');
+      return;
+    }
 
-      if (response.user.userType === 'ESTABLISHMENT') {
-        router.replace('/(merchant)/(tabs)');
-      } else {
-        router.replace('/(consumer)/(tabs)');
-      }
-    } catch (err: unknown) {
-      const maybeAxios = err as { response?: { data?: { message?: string } } };
-      const msg =
-        maybeAxios?.response?.data?.message ||
-        'Falha ao autenticar. Verifique seu e-mail e senha.';
-      setErrorMessage(msg);
+    if (response.user.userType === 'ESTABLISHMENT') {
+      router.replace('/(merchant)/(tabs)');
+    } else {
+      router.replace('/(consumer)/(tabs)');
     }
   };
 
   return (
     <SafeAreaView className="flex-1 bg-neutros-fundo">
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         className="flex-1"
       >
         <ScrollView
+          ref={scrollViewRef}
           contentContainerClassName="grow justify-center px-6 py-8"
           keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
         >
           {/* Header Brand */}
           <View className="items-center mb-8">
@@ -161,10 +189,10 @@ export default function LoginScreen() {
 
             {/* Submit Button */}
             <TouchableOpacity
-              onPress={handleSubmit(onSubmit)}
+              onPress={handleSubmit(onSubmit, onInvalid)}
               disabled={isSubmitting}
               activeOpacity={0.8}
-              className="w-full h-13 bg-consumidor rounded-2xl items-center justify-center shadow-sm"
+              className="w-full h-14 bg-consumidor rounded-2xl items-center justify-center shadow-sm"
             >
               {isSubmitting ? (
                 <ActivityIndicator color="#FFFFFF" />

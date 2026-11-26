@@ -22,6 +22,7 @@ export default function ConsumerInvoiceDetailsScreen() {
     tradeName?: string;
     accessKey?: string;
     status?: string;
+    rejectionReason?: string;
   }>();
 
   const invoiceId = params.id;
@@ -53,6 +54,9 @@ export default function ConsumerInvoiceDetailsScreen() {
     params.status ||
     'PROCESSED';
 
+  const isRejected = status === 'REJECTED';
+  const rejectionReason = invoiceData?.rejectionReason || params.rejectionReason || null;
+
   const issuedAt =
     invoiceData?.issuedAt ||
     invoiceData?.invoice?.issuedAt ||
@@ -75,6 +79,13 @@ export default function ConsumerInvoiceDetailsScreen() {
         ? { bg: 'bg-amber-50 border-amber-200', text: 'text-amber-700' }
         : { bg: 'bg-red-50 border-red-200', text: 'text-red-700' };
 
+  const REJECTION_MESSAGES: Record<string, string> = {
+    EXPIRED_48H: 'Nota fiscal emitida há mais de 48 horas (RN01).',
+    UNSUPPORTED_STATE: 'Estado não homologado nesta versão piloto (apenas SC e PR - RN07).',
+    ESTABLISHMENT_NOT_FOUND: 'Estabelecimento emissor ainda não é parceiro Cash Me (RN03).',
+    INACTIVE_ESTABLISHMENT: 'Estabelecimento temporariamente inativo ou pendente de homologação (RN05/RN06).',
+  };
+
   return (
     <SafeAreaView className="flex-1 bg-neutros-fundo">
       <ScrollView contentContainerClassName="p-6 pb-10">
@@ -96,8 +107,8 @@ export default function ConsumerInvoiceDetailsScreen() {
           </TouchableOpacity>
 
           <View className="items-center">
-            <Text className="text-xs font-bold text-consumidor uppercase tracking-wider">
-              NFC-e Processada
+            <Text className={`text-xs font-bold uppercase tracking-wider ${isRejected ? 'text-red-600' : 'text-consumidor'}`}>
+              {isRejected ? 'NFC-e Rejeitada' : 'NFC-e Processada'}
             </Text>
             <Text className="text-base font-extrabold text-neutros-texto">
               Comprovante
@@ -116,32 +127,53 @@ export default function ConsumerInvoiceDetailsScreen() {
           </View>
         ) : (
           <>
-            {/* Card de Celebração de Pontos */}
-            <View className="bg-consumidor p-8 rounded-3xl shadow-xl shadow-consumidor/30 items-center mb-6">
-              <View className="w-16 h-16 rounded-full bg-white/20 items-center justify-center mb-4 border border-white/30">
-                <Ionicons name="checkmark-done" size={32} color="#FFFFFF" />
-              </View>
-
-              <Text className="text-white/80 text-xs font-bold uppercase tracking-wider mb-1">
-                Pontos Creditados
-              </Text>
-              <Text className="text-white text-5xl font-black tracking-tight mb-2">
-                +{points}{' '}
-                <Text className="text-2xl font-bold text-pontos">pts</Text>
-              </Text>
-
-              <Text className="text-white/95 text-base font-bold text-center">
-                {tradeName}
-              </Text>
-
-              {currentBalance !== undefined && (
-                <View className="mt-4 px-4 py-1.5 rounded-full bg-white/15 border border-white/20">
-                  <Text className="text-white text-xs font-semibold">
-                    Novo saldo na loja: {currentBalance} pts
-                  </Text>
+            {/* Card de Resultado (Processada ou Rejeitada) */}
+            {isRejected ? (
+              <View className="bg-red-600 p-8 rounded-3xl shadow-xl items-center mb-6">
+                <View className="w-16 h-16 rounded-full bg-white/20 items-center justify-center mb-4 border border-white/30">
+                  <Ionicons name="close-circle" size={34} color="#FFFFFF" />
                 </View>
-              )}
-            </View>
+
+                <Text className="text-white/85 text-xs font-bold uppercase tracking-wider mb-1">
+                  Pontuação Não Concedida
+                </Text>
+                <Text className="text-white text-2xl font-black text-center mb-2">
+                  Nota Rejeitada
+                </Text>
+
+                <Text className="text-white/95 text-sm font-medium text-center leading-relaxed">
+                  {(rejectionReason && REJECTION_MESSAGES[rejectionReason]) ||
+                    rejectionReason ||
+                    'Esta nota fiscal não atende aos requisitos de pontuação.'}
+                </Text>
+              </View>
+            ) : (
+              <View className="bg-consumidor p-8 rounded-3xl shadow-xl shadow-consumidor/30 items-center mb-6">
+                <View className="w-16 h-16 rounded-full bg-white/20 items-center justify-center mb-4 border border-white/30">
+                  <Ionicons name="checkmark-done" size={32} color="#FFFFFF" />
+                </View>
+
+                <Text className="text-white/80 text-xs font-bold uppercase tracking-wider mb-1">
+                  Pontos Creditados
+                </Text>
+                <Text className="text-white text-5xl font-black tracking-tight mb-2">
+                  +{points}{' '}
+                  <Text className="text-2xl font-bold text-pontos">pts</Text>
+                </Text>
+
+                <Text className="text-white/95 text-base font-bold text-center">
+                  {tradeName}
+                </Text>
+
+                {currentBalance !== undefined && (
+                  <View className="mt-4 px-4 py-1.5 rounded-full bg-white/15 border border-white/20">
+                    <Text className="text-white text-xs font-semibold">
+                      Novo saldo na loja: {currentBalance} pts
+                    </Text>
+                  </View>
+                )}
+              </View>
+            )}
 
             {/* Detalhes da Nota Fiscal */}
             <View className="bg-white p-6 rounded-3xl border border-neutros-borda shadow-sm mb-6">
